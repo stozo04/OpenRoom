@@ -5,6 +5,7 @@
  * File operations are delegated to IndexedDB; Actions communicate via a local event bus.
  */
 
+import i18next from 'i18next';
 import * as idb from './indexedDbStorage';
 import { isReportUserActionsEnabled } from './action';
 
@@ -307,7 +308,7 @@ const mockManager = {
 
   getSystemSettings: (): Promise<SystemSettingsResponse> =>
     Promise.resolve({
-      language: { current: navigator.language, options: ['en', 'zh'] },
+      language: { current: i18next.language || navigator.language, options: ['en', 'zh'] },
     }),
 };
 
