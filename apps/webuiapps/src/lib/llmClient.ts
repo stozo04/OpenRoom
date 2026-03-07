@@ -66,9 +66,9 @@ interface LLMResponse {
 }
 
 import { logger } from './logger';
+import { loadPersistedConfig, savePersistedConfig } from './configPersistence';
 
 const CONFIG_KEY = 'webuiapps-llm-config';
-const CONFIG_API = '/api/llm-config';
 
 const DEFAULT_CONFIGS: Record<LLMProvider, Omit<LLMConfig, 'apiKey'>> = {
   openai: { provider: 'openai', baseUrl: 'https://api.openai.com', model: 'gpt-5.3-chat-latest' },
@@ -92,16 +92,15 @@ export function getDefaultConfig(provider: LLMProvider): Omit<LLMConfig, 'apiKey
 /**
  * Load config — priority: local file (~/.openroom/config.json) > localStorage.
  * Falls back gracefully if the dev server API is unavailable (e.g. production build).
+ * Handles both legacy flat format and new { llm, imageGen? } format.
  */
 export async function loadConfig(): Promise<LLMConfig | null> {
-  // 1. Try local file via dev-server API
+  // 1. Try local file via dev-server API (handles legacy + new format)
   try {
-    const res = await fetch(CONFIG_API);
-    if (res.ok) {
-      const config: LLMConfig = await res.json();
-      // Sync to localStorage so callers that read it synchronously stay warm
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-      return config;
+    const persisted = await loadPersistedConfig();
+    if (persisted?.llm) {
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(persisted.llm));
+      return persisted.llm;
     }
   } catch {
     // API not available (production / network error) — fall through
@@ -118,21 +117,23 @@ export async function loadConfig(): Promise<LLMConfig | null> {
 
 /**
  * Save config — writes to both localStorage and local file (~/.openroom/config.json).
+ * Optionally accepts imageGenConfig to persist both atomically.
  */
-export async function saveConfig(config: LLMConfig): Promise<void> {
+export async function saveConfig(
+  config: LLMConfig,
+  imageGenConfig?: import('./imageGenClient').ImageGenConfig | null,
+): Promise<void> {
   // Always write localStorage (sync, instant)
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 
-  // Best-effort write to local file
-  try {
-    await fetch(CONFIG_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-  } catch {
-    // Silently ignore if API is not available
+  // Build persisted config — include imageGen if provided
+  const persisted: import('./configPersistence').PersistedConfig = { llm: config };
+  if (imageGenConfig) {
+    persisted.imageGen = imageGenConfig;
   }
+
+  // Best-effort write to local file
+  await savePersistedConfig(persisted);
 }
 
 /** Synchronous read from localStorage cache (use after loadConfig() has been awaited once). */

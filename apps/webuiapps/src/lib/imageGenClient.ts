@@ -19,6 +19,7 @@ export interface ImageGenResult {
 }
 
 import { logger } from './logger';
+import { loadPersistedConfig } from './configPersistence';
 
 const CONFIG_KEY = 'webuiapps-imagegen-config';
 
@@ -41,7 +42,28 @@ export function getDefaultImageGenConfig(
   return DEFAULT_CONFIGS[provider];
 }
 
-export function loadImageGenConfig(): ImageGenConfig | null {
+/**
+ * Load image gen config — priority: local file (~/.openroom/config.json) > localStorage.
+ * Falls back gracefully if the dev server API is unavailable.
+ */
+export async function loadImageGenConfig(): Promise<ImageGenConfig | null> {
+  // 1. Try local file via dev-server API
+  try {
+    const persisted = await loadPersistedConfig();
+    if (persisted?.imageGen) {
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(persisted.imageGen));
+      return persisted.imageGen;
+    }
+  } catch {
+    // API not available — fall through
+  }
+
+  // 2. Fall back to localStorage
+  return loadImageGenConfigSync();
+}
+
+/** Synchronous read from localStorage cache. */
+export function loadImageGenConfigSync(): ImageGenConfig | null {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
     return raw ? JSON.parse(raw) : null;

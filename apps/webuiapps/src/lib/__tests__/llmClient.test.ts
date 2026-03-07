@@ -164,29 +164,35 @@ describe('loadConfigSync()', () => {
 // ─── loadConfig() ─────────────────────────────────────────────────────────────
 
 describe('loadConfig()', () => {
-  describe('Scenario A: API returns 200 (file exists)', () => {
-    it('returns config from API and syncs to localStorage', async () => {
+  describe('Scenario A: API returns 200 with new format', () => {
+    it('returns LLM config from { llm, imageGen } format and syncs to localStorage', async () => {
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(MOCK_OPENAI_CONFIG),
-      } as Response);
+        json: () =>
+          Promise.resolve({
+            llm: MOCK_OPENAI_CONFIG,
+            imageGen: { provider: 'openai', apiKey: 'k', baseUrl: 'u', model: 'm' },
+          }),
+      } as unknown as Response);
 
       const result = await loadConfig();
 
       expect(result).toEqual(MOCK_OPENAI_CONFIG);
       expect(localStorage.getItem(CONFIG_KEY)).toBe(JSON.stringify(MOCK_OPENAI_CONFIG));
     });
+  });
 
-    it('calls the correct API endpoint', async () => {
-      const mockFetch = vi.fn().mockResolvedValueOnce({
+  describe('Scenario A2: API returns 200 with legacy flat format', () => {
+    it('returns config from legacy flat LLMConfig format', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(MOCK_OPENAI_CONFIG),
-      } as Response);
-      globalThis.fetch = mockFetch;
+      } as unknown as Response);
 
-      await loadConfig();
+      const result = await loadConfig();
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/llm-config');
+      expect(result).toEqual(MOCK_OPENAI_CONFIG);
+      expect(localStorage.getItem(CONFIG_KEY)).toBe(JSON.stringify(MOCK_OPENAI_CONFIG));
     });
   });
 
@@ -239,7 +245,7 @@ describe('saveConfig()', () => {
     expect(localStorage.getItem(CONFIG_KEY)).toBe(JSON.stringify(MOCK_OPENAI_CONFIG));
   });
 
-  it('calls POST /api/llm-config with correct method, headers and body', async () => {
+  it('POSTs new { llm } format to /api/llm-config', async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true } as Response);
     globalThis.fetch = mockFetch;
 
@@ -248,8 +254,20 @@ describe('saveConfig()', () => {
     expect(mockFetch).toHaveBeenCalledWith('/api/llm-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(MOCK_OPENAI_CONFIG),
+      body: JSON.stringify({ llm: MOCK_OPENAI_CONFIG }),
     });
+  });
+
+  it('includes imageGen when provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true } as Response);
+    globalThis.fetch = mockFetch;
+
+    const igConfig = { provider: 'openai' as const, apiKey: 'k', baseUrl: 'u', model: 'm' };
+    await saveConfig(MOCK_OPENAI_CONFIG, igConfig);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    expect(body.llm).toEqual(MOCK_OPENAI_CONFIG);
+    expect(body.imageGen).toEqual(igConfig);
   });
 
   it('does not throw when POST request fails silently', async () => {

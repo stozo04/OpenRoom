@@ -12,6 +12,7 @@ import {
 } from '@/lib/llmClient';
 import {
   loadImageGenConfig,
+  loadImageGenConfigSync,
   saveImageGenConfig,
   getDefaultImageGenConfig,
   type ImageGenConfig,
@@ -73,12 +74,17 @@ const ChatPanel: React.FC<{ onClose: () => void; visible?: boolean }> = ({
   const [showSettings, setShowSettings] = useState(false);
   // Init from localStorage immediately (sync), then override from local file if available
   const [config, setConfig] = useState<LLMConfig | null>(loadConfigSync);
-  const [imageGenConfig, setImageGenConfig] = useState<ImageGenConfig | null>(loadImageGenConfig);
+  const [imageGenConfig, setImageGenConfig] = useState<ImageGenConfig | null>(
+    loadImageGenConfigSync,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadConfig().then((fileConfig) => {
       if (fileConfig) setConfig(fileConfig);
+    });
+    loadImageGenConfig().then((fileConfig) => {
+      if (fileConfig) setImageGenConfig(fileConfig);
     });
   }, []);
 
@@ -516,8 +522,9 @@ const ChatPanel: React.FC<{ onClose: () => void; visible?: boolean }> = ({
           imageGenConfig={imageGenConfig}
           onSave={(c, igc) => {
             setConfig(c);
-            saveConfig(c);
             setImageGenConfig(igc);
+            // Persist both configs atomically to ~/.openroom/config.json
+            saveConfig(c, igc);
             if (igc) {
               saveImageGenConfig(igc);
             }
