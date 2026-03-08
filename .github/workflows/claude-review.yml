@@ -33,8 +33,11 @@ jobs:
           ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
         with:
           anthropic_api_key: ${{ secrets.MINIMAX_API_KEY }}
+          show_full_output: true
           prompt: |
-            Review this pull request. Focus on:
+            Review this pull request and always leave a review comment on the PR summarizing your findings.
+            Even if the changes are minor, post a brief comment acknowledging the review.
+            Focus on:
             1. Code correctness and potential bugs
             2. TypeScript type safety
             3. React best practices and performance
