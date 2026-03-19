@@ -10,17 +10,13 @@ import {
   Pencil,
   List,
 } from 'lucide-react';
+import { chat, loadConfig, loadConfigSync, saveConfig, type ChatMessage } from '@/lib/llmClient';
 import {
-  chat,
-  loadConfig,
-  loadConfigSync,
-  saveConfig,
-  getDefaultConfig,
+  PROVIDER_MODELS,
+  getDefaultProviderConfig,
   type LLMConfig,
   type LLMProvider,
-  type ChatMessage,
-} from '@/lib/llmClient';
-import { PROVIDER_MODELS } from '@/lib/llmModels';
+} from '@/lib/llmModels';
 import {
   loadImageGenConfig,
   loadImageGenConfigSync,
@@ -1011,6 +1007,7 @@ const ChatPanel: React.FC<{ onClose: () => void; visible?: boolean }> = ({
             {messages.map((msg) => (
               <React.Fragment key={msg.id}>
                 <div
+                  data-testid="chat-message"
                   className={`${styles.message} ${
                     msg.role === 'user'
                       ? styles.user
@@ -1124,8 +1121,10 @@ const SettingsModal: React.FC<{
   // LLM settings
   const [provider, setProvider] = useState<LLMProvider>(config?.provider || 'minimax');
   const [apiKey, setApiKey] = useState(config?.apiKey || '');
-  const [baseUrl, setBaseUrl] = useState(config?.baseUrl || getDefaultConfig('minimax').baseUrl);
-  const [model, setModel] = useState(config?.model || getDefaultConfig('minimax').model);
+  const [baseUrl, setBaseUrl] = useState(
+    config?.baseUrl || getDefaultProviderConfig('minimax').baseUrl,
+  );
+  const [model, setModel] = useState(config?.model || getDefaultProviderConfig('minimax').model);
   const [customHeaders, setCustomHeaders] = useState(config?.customHeaders || '');
   const [manualModelMode, setManualModelMode] = useState(false);
 
@@ -1147,7 +1146,7 @@ const SettingsModal: React.FC<{
 
   const handleProviderChange = (p: LLMProvider) => {
     setProvider(p);
-    const defaults = getDefaultConfig(p);
+    const defaults = getDefaultProviderConfig(p);
     setBaseUrl(defaults.baseUrl);
     setModel(defaults.model);
     setManualModelMode(false);

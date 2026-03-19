@@ -5,7 +5,11 @@ import type { ChatMessage } from '../llmClient';
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
-const STORAGE_KEY = 'webuiapps-chat-history';
+const SESSION_PATH = 'char-1/mod-1';
+
+function expectedUrl(file: string): string {
+  return `/api/session-data?path=${encodeURIComponent(`${SESSION_PATH}/chat/${file}`)}`;
+}
 
 const sampleMessages: DisplayMessage[] = [
   { id: '1', role: 'user', content: 'Hello' },
@@ -24,49 +28,18 @@ function makeSavedData(msgs = sampleMessages, history = sampleChatHistory): Chat
 describe('chatHistoryStorage', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    localStorage.clear();
     vi.resetModules();
   });
 
-  // ============ loadChatHistorySync ============
-
   describe('loadChatHistorySync', () => {
-    it('returns null when localStorage is empty', async () => {
+    it('returns null', async () => {
       const { loadChatHistorySync } = await import('../chatHistoryStorage');
-      expect(loadChatHistorySync()).toBeNull();
-    });
-
-    it('returns data from localStorage', async () => {
-      const data = makeSavedData();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      const { loadChatHistorySync } = await import('../chatHistoryStorage');
-      const result = loadChatHistorySync();
-      expect(result).not.toBeNull();
-      expect(result!.messages).toHaveLength(2);
-      expect(result!.chatHistory).toHaveLength(2);
-      expect(result!.version).toBe(1);
-    });
-
-    it('returns null for invalid JSON', async () => {
-      localStorage.setItem(STORAGE_KEY, 'not-json');
-      const { loadChatHistorySync } = await import('../chatHistoryStorage');
-      expect(loadChatHistorySync()).toBeNull();
-    });
-
-    it('returns null for wrong version', async () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ version: 99, savedAt: 0, messages: [], chatHistory: [] }),
-      );
-      const { loadChatHistorySync } = await import('../chatHistoryStorage');
-      expect(loadChatHistorySync()).toBeNull();
+      expect(loadChatHistorySync(SESSION_PATH)).toBeNull();
     });
   });
 
-  // ============ loadChatHistory (async) ============
-
   describe('loadChatHistory', () => {
-    it('loads from API and syncs to localStorage', async () => {
+    it('loads from API', async () => {
       const data = makeSavedData();
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -74,107 +47,82 @@ describe('chatHistoryStorage', () => {
       });
       const { loadChatHistory } = await import('../chatHistoryStorage');
 
-      const result = await loadChatHistory();
+      const result = await loadChatHistory(SESSION_PATH);
 
-      expect(fetchMock).toHaveBeenCalledWith('/api/chat-history');
+      expect(fetchMock).toHaveBeenCalledWith(expectedUrl('chat.json'));
       expect(result).not.toBeNull();
       expect(result!.messages).toEqual(sampleMessages);
-      // Verify synced to localStorage
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-      expect(stored.version).toBe(1);
     });
 
-    it('falls back to localStorage when API returns non-ok', async () => {
-      const data = makeSavedData();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    it('returns null when API returns non-ok', async () => {
       fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
       const { loadChatHistory } = await import('../chatHistoryStorage');
 
-      const result = await loadChatHistory();
+      const result = await loadChatHistory(SESSION_PATH);
 
-      expect(result).not.toBeNull();
-      expect(result!.messages).toEqual(sampleMessages);
+      expect(result).toBeNull();
     });
 
-    it('falls back to localStorage when fetch throws', async () => {
-      const data = makeSavedData();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    it('returns null when fetch throws', async () => {
       fetchMock.mockRejectedValueOnce(new Error('network error'));
       const { loadChatHistory } = await import('../chatHistoryStorage');
 
-      const result = await loadChatHistory();
+      const result = await loadChatHistory(SESSION_PATH);
 
-      expect(result).not.toBeNull();
-      expect(result!.messages).toEqual(sampleMessages);
+      expect(result).toBeNull();
     });
 
-    it('returns null when both API and localStorage are empty', async () => {
+    it('returns null when API is empty', async () => {
       fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
       const { loadChatHistory } = await import('../chatHistoryStorage');
 
-      const result = await loadChatHistory();
+      const result = await loadChatHistory(SESSION_PATH);
       expect(result).toBeNull();
     });
   });
 
-  // ============ saveChatHistory ============
-
   describe('saveChatHistory', () => {
-    it('saves to localStorage and POSTs to API', async () => {
+    it('POSTs to API with expected payload', async () => {
       fetchMock.mockResolvedValueOnce({ ok: true });
       const { saveChatHistory } = await import('../chatHistoryStorage');
 
-      await saveChatHistory(sampleMessages, sampleChatHistory);
+      await saveChatHistory(SESSION_PATH, sampleMessages, sampleChatHistory);
 
-      // Check localStorage
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-      expect(stored.version).toBe(1);
-      expect(stored.messages).toEqual(sampleMessages);
-      expect(stored.chatHistory).toEqual(sampleChatHistory);
-      expect(typeof stored.savedAt).toBe('number');
-
-      // Check fetch call
       expect(fetchMock).toHaveBeenCalledOnce();
       const [url, options] = fetchMock.mock.calls[0];
-      expect(url).toBe('/api/chat-history');
+      expect(url).toBe(expectedUrl('chat.json'));
       expect(options.method).toBe('POST');
       const body = JSON.parse(options.body);
       expect(body.version).toBe(1);
+      expect(body.messages).toEqual(sampleMessages);
+      expect(body.chatHistory).toEqual(sampleChatHistory);
     });
 
-    it('saves to localStorage even when fetch fails', async () => {
+    it('does not throw when fetch fails', async () => {
       fetchMock.mockRejectedValueOnce(new Error('network error'));
       const { saveChatHistory } = await import('../chatHistoryStorage');
 
-      await saveChatHistory(sampleMessages, sampleChatHistory);
-
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-      expect(stored.messages).toEqual(sampleMessages);
+      await expect(
+        saveChatHistory(SESSION_PATH, sampleMessages, sampleChatHistory),
+      ).resolves.toBeUndefined();
     });
   });
 
-  // ============ clearChatHistory ============
-
   describe('clearChatHistory', () => {
-    it('removes from localStorage and sends DELETE to API', async () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSavedData()));
+    it('sends DELETE to API', async () => {
       fetchMock.mockResolvedValueOnce({ ok: true });
       const { clearChatHistory } = await import('../chatHistoryStorage');
 
-      await clearChatHistory();
+      await clearChatHistory(SESSION_PATH);
 
-      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-      expect(fetchMock).toHaveBeenCalledWith('/api/chat-history', { method: 'DELETE' });
+      expect(fetchMock).toHaveBeenCalledWith(expectedUrl('chat.json'), { method: 'DELETE' });
     });
 
-    it('clears localStorage even when DELETE fetch fails', async () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(makeSavedData()));
+    it('does not throw when DELETE fetch fails', async () => {
       fetchMock.mockRejectedValueOnce(new Error('network error'));
       const { clearChatHistory } = await import('../chatHistoryStorage');
 
-      await clearChatHistory();
-
-      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+      await expect(clearChatHistory(SESSION_PATH)).resolves.toBeUndefined();
     });
   });
 });

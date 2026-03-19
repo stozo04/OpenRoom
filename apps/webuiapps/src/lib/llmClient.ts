@@ -3,18 +3,12 @@
  * Supports OpenAI / DeepSeek / Anthropic formats
  */
 
-import { getDefaultProviderConfig, type LLMConfig, type LLMProvider } from './llmModels';
-
-export type { LLMConfig, LLMProvider };
+import type { LLMConfig } from './llmModels';
 
 import { logger } from './logger';
 import { loadPersistedConfig, savePersistedConfig } from './configPersistence';
 
 const CONFIG_KEY = 'webuiapps-llm-config';
-
-export function getDefaultConfig(provider: LLMProvider): Omit<LLMConfig, 'apiKey'> {
-  return getDefaultProviderConfig(provider);
-}
 
 export async function loadConfig(): Promise<LLMConfig | null> {
   try {
@@ -94,6 +88,22 @@ interface LLMResponse {
   toolCalls: ToolCall[];
 }
 
+function hasVersionSuffix(url: string): boolean {
+  return /\/v\d+\/?$/.test(url);
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+function getOpenAICompletionsPath(baseUrl: string): string {
+  return hasVersionSuffix(baseUrl) ? 'chat/completions' : 'v1/chat/completions';
+}
+
+function getAnthropicMessagesPath(baseUrl: string): string {
+  return hasVersionSuffix(baseUrl) ? 'messages' : 'v1/messages';
+}
+
 function parseCustomHeaders(raw?: string): Record<string, string> {
   if (!raw) return {};
   const headers: Record<string, string> = {};
@@ -143,7 +153,7 @@ async function chatOpenAI(
     body.tools = tools;
   }
 
-  const targetUrl = `${config.baseUrl}/chat/completions`;
+  const targetUrl = joinUrl(config.baseUrl, getOpenAICompletionsPath(config.baseUrl));
   const toolNames = Array.isArray(tools) ? tools.map((t) => t.function?.name).filter(Boolean) : [];
   logger.info('ToolLog', 'LLM Request: toolCount=', tools.length, 'toolNames=', toolNames);
   logger.info('LLM', 'Request:', {
@@ -250,7 +260,7 @@ async function chatAnthropic(
     'toolNames=',
     anthropicToolNames,
   );
-  const targetUrl = `${config.baseUrl}/v1/messages`;
+  const targetUrl = joinUrl(config.baseUrl, getAnthropicMessagesPath(config.baseUrl));
   logger.info('LLM', 'Anthropic Request:', {
     targetUrl,
     model: config.model,

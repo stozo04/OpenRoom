@@ -47,12 +47,19 @@ test.describe('Chat panel – visibility toggle', () => {
     await expect(panel).toBeVisible();
   });
 
-  test('chat panel shows empty state prompt when no messages', async ({ page }) => {
+  test('chat panel shows either setup hint or chat messages', async ({ page }) => {
     await page.goto('/');
     const messages = page.locator('[data-testid="chat-messages"]');
     await expect(messages).toBeVisible();
-    // Should contain the empty-state text (either "Start a conversation" or "configure")
-    await expect(messages).toContainText(/Start a conversation|configure/i);
+
+    const emptyStateHint = messages.getByText(/configure your LLM API key|is ready to chat/i);
+    const chatMessages = page.locator('[data-testid="chat-message"]');
+
+    await expect
+      .poll(async () => {
+        return (await emptyStateHint.count()) + (await chatMessages.count());
+      })
+      .toBeGreaterThan(0);
   });
 });
 

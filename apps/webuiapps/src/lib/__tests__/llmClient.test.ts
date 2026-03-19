@@ -9,7 +9,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  getDefaultConfig,
   loadConfig,
   loadConfigSync,
   saveConfig,
@@ -17,7 +16,7 @@ import {
   type ChatMessage,
   type ToolDef,
 } from '../llmClient';
-import type { LLMConfig } from '../llmModels';
+import { getDefaultProviderConfig, type LLMConfig } from '../llmModels';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -92,11 +91,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ─── getDefaultConfig() ───────────────────────────────────────────────────────
-
-describe('getDefaultConfig()', () => {
+describe('getDefaultProviderConfig()', () => {
   it('returns correct defaults for openai', () => {
-    const cfg = getDefaultConfig('openai');
+    const cfg = getDefaultProviderConfig('openai');
     expect(cfg.provider).toBe('openai');
     expect(cfg.baseUrl).toBe('https://api.openai.com/v1');
     expect(cfg.model).toBe('gpt-5.4');
@@ -104,43 +101,43 @@ describe('getDefaultConfig()', () => {
   });
 
   it('returns correct defaults for anthropic', () => {
-    const cfg = getDefaultConfig('anthropic');
+    const cfg = getDefaultProviderConfig('anthropic');
     expect(cfg.provider).toBe('anthropic');
     expect(cfg.baseUrl).toBe('https://api.anthropic.com/v1');
     expect(cfg.model).toBe('claude-sonnet-4-6');
   });
 
   it('returns correct defaults for deepseek', () => {
-    const cfg = getDefaultConfig('deepseek');
+    const cfg = getDefaultProviderConfig('deepseek');
     expect(cfg.provider).toBe('deepseek');
     expect(cfg.baseUrl).toBe('https://api.deepseek.com/v1');
     expect(cfg.model).toBe('deepseek-chat');
   });
 
   it('returns correct defaults for minimax', () => {
-    const cfg = getDefaultConfig('minimax');
+    const cfg = getDefaultProviderConfig('minimax');
     expect(cfg.provider).toBe('minimax');
     expect(cfg.baseUrl).toBe('https://api.minimax.io/anthropic/v1');
     expect(cfg.model).toBe('MiniMax-M2.5');
   });
 
   it('returns correct defaults for z.ai', () => {
-    const cfg = getDefaultConfig('z.ai');
+    const cfg = getDefaultProviderConfig('z.ai');
     expect(cfg.provider).toBe('z.ai');
     expect(cfg.baseUrl).toBe('https://api.z.ai/api/coding/paas/v4');
     expect(cfg.model).toBe('glm-5');
   });
 
   it('returns correct defaults for kimi', () => {
-    const cfg = getDefaultConfig('kimi');
+    const cfg = getDefaultProviderConfig('kimi');
     expect(cfg.provider).toBe('kimi');
     expect(cfg.baseUrl).toBe('https://api.moonshot.cn/v1');
     expect(cfg.model).toBe('kimi-k2-5');
   });
 
   it('returns consistent values for the same provider', () => {
-    const a = getDefaultConfig('openai');
-    const b = getDefaultConfig('openai');
+    const a = getDefaultProviderConfig('openai');
+    const b = getDefaultProviderConfig('openai');
     expect(a).toStrictEqual(b);
   });
 });
@@ -345,6 +342,16 @@ describe('chat()', () => {
       expect(headers['Authorization']).toBe('Bearer sk-test-key');
     });
 
+    it('uses v1/chat/completions when baseUrl has no version suffix', async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce(makeOpenAIResponse('ok'));
+      globalThis.fetch = mockFetch;
+
+      await chat(MOCK_MESSAGES, [], MOCK_OPENAI_CONFIG);
+
+      const headers = mockFetch.mock.calls[0][1].headers as Record<string, string>;
+      expect(headers['X-LLM-Target-URL']).toBe('https://api.openai.com/v1/chat/completions');
+    });
+
     it('includes tools in body when tools array is non-empty', async () => {
       const mockFetch = vi.fn().mockResolvedValueOnce(makeOpenAIResponse('ok'));
       globalThis.fetch = mockFetch;
@@ -419,6 +426,20 @@ describe('chat()', () => {
       const headers = mockFetch.mock.calls[0][1].headers as Record<string, string>;
       expect(headers['anthropic-version']).toBe('2023-06-01');
       expect(headers['x-api-key']).toBe('ant-test-key');
+    });
+
+    it('uses /messages when baseUrl already includes /v1', async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce(makeAnthropicResponse('Anthropic response'));
+      globalThis.fetch = mockFetch;
+
+      const configWithVersion: LLMConfig = {
+        ...MOCK_ANTHROPIC_CONFIG,
+        baseUrl: 'https://api.anthropic.com/v1',
+      };
+      await chat(MOCK_MESSAGES, [], configWithVersion);
+
+      const headers = mockFetch.mock.calls[0][1].headers as Record<string, string>;
+      expect(headers['X-LLM-Target-URL']).toBe('https://api.anthropic.com/v1/messages');
     });
 
     it('extracts system message to top-level system field', async () => {

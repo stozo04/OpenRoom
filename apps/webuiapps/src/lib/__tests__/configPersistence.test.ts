@@ -10,7 +10,7 @@ import {
   savePersistedConfig,
   type PersistedConfig,
 } from '../configPersistence';
-import type { LLMConfig } from '../llmClient';
+import type { LLMConfig } from '../llmModels';
 import type { ImageGenConfig } from '../imageGenClient';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────

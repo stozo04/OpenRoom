@@ -6,7 +6,7 @@
  * automatically migrated on read.
  */
 
-import type { LLMConfig } from './llmClient';
+import type { LLMConfig } from './llmModels';
 import type { ImageGenConfig } from './imageGenClient';
 
 export interface PersistedConfig {
