@@ -425,7 +425,21 @@ const ChatPanel: React.FC<{
   const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
   const [showCharacterPanel, setShowCharacterPanel] = useState(false);
   const [showModPanel, setShowModPanel] = useState(false);
+  const [initialEditModId, setInitialEditModId] = useState<string | undefined>();
   const [currentEmotion, setCurrentEmotion] = useState<string | undefined>();
+
+  // Open mod editor when triggered from Shell (e.g. after card import mod generation)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const modId = (e as CustomEvent<{ modId: string }>).detail?.modId;
+      if (modId) {
+        setInitialEditModId(modId);
+        setShowModPanel(true);
+      }
+    };
+    window.addEventListener('open-mod-editor', handler);
+    return () => window.removeEventListener('open-mod-editor', handler);
+  }, []);
 
   // Memories loaded for SP injection
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
@@ -538,6 +552,20 @@ const ChatPanel: React.FC<{
         setModManager(new ModManager(entry.config, entry.state));
       }
     });
+  }, []);
+
+  // Listen for mod collection changes from Shell (e.g. after mod generation)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const col = (e as CustomEvent<ModCollection>).detail;
+      if (col) {
+        setModCollection(col);
+        const entry = getActiveModEntry(col);
+        setModManager(new ModManager(entry.config, entry.state));
+      }
+    };
+    window.addEventListener('mod-collection-changed', handler);
+    return () => window.removeEventListener('mod-collection-changed', handler);
   }, []);
 
   const handleClearHistory = useCallback(async () => {
@@ -1169,14 +1197,19 @@ const ChatPanel: React.FC<{
       {showModPanel && (
         <ModPanel
           collection={modCollection}
+          initialEditId={initialEditModId}
           onSave={(col) => {
             setModCollection(col);
             saveModCollection(col);
             const entry = getActiveModEntry(col);
             setModManager(new ModManager(entry.config, entry.state));
             setShowModPanel(false);
+            setInitialEditModId(undefined);
           }}
-          onClose={() => setShowModPanel(false)}
+          onClose={() => {
+            setShowModPanel(false);
+            setInitialEditModId(undefined);
+          }}
         />
       )}
     </>

@@ -14,7 +14,11 @@ import {
   Radio,
   Video,
   VideoOff,
+  Plus,
   X,
+  Upload,
+  FileImage,
+  FileArchive,
   type LucideIcon,
 } from 'lucide-react';
 import ChatPanel from '../ChatPanel';
@@ -22,9 +26,22 @@ import AppWindow from '../AppWindow';
 import { getWindows, subscribe, openWindow, claimZIndex } from '@/lib/windowManager';
 import { getDesktopApps } from '@/lib/appRegistry';
 import { reportUserOsAction, onOSEvent } from '@/lib/vibeContainerMock';
-import { setReportUserActions } from '@/lib';
+import { setReportUserActions, extractCard } from '@/lib';
+import type { ExtractResult, Manifest } from '@/lib';
+import { buildModPrompt } from './modPrompt';
+import { chat, loadConfig } from '@/lib/llmClient';
+import {
+  generateModId,
+  addMod,
+  setActiveMod,
+  saveModCollection,
+  loadModCollectionSync,
+  DEFAULT_MOD_COLLECTION,
+} from '@/lib/modManager';
+import type { ModConfig } from '@/lib/modManager';
 import i18next from 'i18next';
 import { seedMetaFiles } from '@/lib/seedMeta';
+import { logger } from '@/lib/logger';
 import styles from './index.module.scss';
 
 function useWindows() {
@@ -72,6 +89,128 @@ const Shell: React.FC = () => {
   const [reportEnabled, setReportEnabled] = useState(true);
   const [lang, setLang] = useState<'en' | 'zh'>('en');
   const [liveWallpaper, setLiveWallpaper] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [extractResult, setExtractResult] = useState<ExtractResult | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [modGenerating, setModGenerating] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      setExtractResult(null);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  const handleRemoveFile = useCallback(() => {
+    setUploadedFile(null);
+    setExtractResult(null);
+  }, []);
+
+  const generateMod = useCallback(async (character: Manifest['character']): Promise<string> => {
+    const llmConfig = await loadConfig();
+    if (!llmConfig) {
+      throw new Error(
+        'No LLM configuration found. Please open Settings (gear icon) and configure your LLM API key first.',
+      );
+    }
+
+    const prompt = buildModPrompt([], JSON.stringify({ character, apps: [] }));
+    logger.info('Shell', 'Mod generation prompt built, length:', prompt.length);
+
+    setModGenerating(true);
+    try {
+      const response = await chat([{ role: 'user', content: prompt }], [], llmConfig);
+      logger.info('Shell', 'Mod generation LLM response length:', response.content.length);
+
+      let jsonStr = response.content.trim();
+      const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+      let modJson: Record<string, unknown>;
+      try {
+        modJson = JSON.parse(jsonStr);
+      } catch {
+        throw new Error('LLM returned invalid JSON. Try again or use a different model.');
+      }
+
+      const modId = generateModId();
+      const modConfig: ModConfig = {
+        id: modId,
+        mod_name: (modJson.name as string) || (modJson.identifier as string) || 'Generated Mod',
+        mod_name_en: (modJson.name as string) || (modJson.identifier as string) || 'Generated Mod',
+        mod_description: (modJson.description as string) || '',
+        display_desc: (modJson.display_desc as string) || '',
+        prologue: (modJson.prologue as string) || '',
+        opening_rec_replies: Array.isArray(modJson.opening_rec_replies)
+          ? (modJson.opening_rec_replies as string[]).map((r) => ({ reply_text: r }))
+          : [],
+        stage_count: Array.isArray(modJson.stages) ? modJson.stages.length : 0,
+        stages: Array.isArray(modJson.stages)
+          ? Object.fromEntries(
+              (
+                modJson.stages as Array<{
+                  name: string;
+                  description: string;
+                  targets: Array<{ id: number; description: string }>;
+                }>
+              ).map((s, i) => [
+                i,
+                {
+                  stage_index: i,
+                  stage_name: s.name || `Stage ${i + 1}`,
+                  stage_description: s.description || '',
+                  stage_targets: Object.fromEntries(
+                    (s.targets || []).map((t) => [t.id, t.description]),
+                  ),
+                },
+              ]),
+            )
+          : {},
+      };
+
+      const collection = loadModCollectionSync() ?? DEFAULT_MOD_COLLECTION;
+      const updated = setActiveMod(addMod(collection, modConfig), modId);
+      await saveModCollection(updated);
+      logger.info('Shell', 'Mod saved successfully:', modId, modConfig.mod_name);
+      return modId;
+    } catch (err) {
+      logger.error('Shell', 'Mod generation failed:', err);
+      throw err;
+    } finally {
+      setModGenerating(false);
+    }
+  }, []);
+
+  const [modGenError, setModGenError] = useState<string | null>(null);
+
+  const handleUploadSubmit = useCallback(async () => {
+    if (!uploadedFile) return;
+    setExtracting(true);
+    setExtractResult(null);
+    setModGenError(null);
+    try {
+      const result = await extractCard(uploadedFile);
+      setExtractResult(result);
+      if (result.status === 'success') {
+        logger.info('Shell', 'Card extracted:', result.manifest);
+        setUploadedFile(null);
+        setUploadOpen(false);
+        setExtractResult(null);
+        // extracting will be cleared in finally; generateMod shows its own modGenerating overlay
+        const modId = await generateMod(result.manifest.character);
+        window.dispatchEvent(new CustomEvent('open-mod-editor', { detail: { modId } }));
+      }
+    } catch (err) {
+      logger.error('Shell', 'Upload submit error:', err);
+      setModGenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExtracting(false);
+    }
+  }, [uploadedFile, generateMod]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [wallpaper, setWallpaper] = useState(VIDEO_WALLPAPER);
   const [chatZIndex, setChatZIndex] = useState(() => claimZIndex());
@@ -145,6 +284,13 @@ const Shell: React.FC = () => {
     seedMetaFiles();
   }, []);
 
+  // Pause user action reporting while upload or mod generation is in progress
+  useEffect(() => {
+    const shouldListen = !uploadOpen && !modGenerating;
+    setReportUserActions(shouldListen);
+    setReportEnabled(shouldListen);
+  }, [uploadOpen, modGenerating]);
+
   // Listen for OS events (e.g. wallpaper changes from agent)
   useEffect(() => {
     return onOSEvent((event) => {
@@ -217,7 +363,96 @@ const Shell: React.FC = () => {
         onFocus={() => setChatZIndex(claimZIndex())}
       />
 
-      <div ref={barRef} className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}>
+      {/* Upload Modal */}
+      {uploadOpen && (
+        <div className={styles.uploadOverlay} onClick={() => setUploadOpen(false)}>
+          <div className={styles.uploadModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.uploadHeader}>
+              <span>Upload File</span>
+              <button className={styles.uploadClose} onClick={() => setUploadOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            {uploadedFile ? (
+              <div className={styles.uploadedFileCenter}>
+                {uploadedFile.name.endsWith('.zip') ? (
+                  <FileArchive size={36} />
+                ) : (
+                  <FileImage size={36} />
+                )}
+                <span className={styles.uploadFileName}>{uploadedFile.name}</span>
+                <button
+                  className={styles.uploadRemoveBtn}
+                  onClick={handleRemoveFile}
+                  title="Remove"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className={styles.uploadDropZone} onClick={() => fileInputRef.current?.click()}>
+                <Upload size={32} />
+                <p>Click to select a file</p>
+                <p className={styles.uploadHint}>PNG image or ZIP archive</p>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".png,.zip"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+            {extractResult?.status === 'error' && (
+              <p className={styles.uploadError}>{extractResult.message}</p>
+            )}
+            <button
+              className={`${styles.uploadSubmitBtn} ${uploadedFile ? styles.active : ''}`}
+              disabled={!uploadedFile || extracting}
+              onClick={handleUploadSubmit}
+            >
+              {extracting ? 'Parsing...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mod generating overlay */}
+      {modGenerating && (
+        <div className={styles.uploadOverlay}>
+          <div className={styles.analyzingCard}>
+            <div className={styles.analyzingSpinner} />
+            <span>Generating mod...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Mod generation error toast */}
+      {modGenError && !modGenerating && (
+        <div className={styles.uploadOverlay} onClick={() => setModGenError(null)}>
+          <div className={styles.uploadModal} onClick={(e) => e.stopPropagation()}>
+            <p className={styles.uploadError}>{modGenError}</p>
+            <button
+              className={`${styles.uploadSubmitBtn} ${styles.active}`}
+              onClick={() => setModGenError(null)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating add button */}
+      <button
+        className={`${styles.addBtn} ${chatOpen ? styles.chatOpen : ''}`}
+        onClick={() => setUploadOpen(true)}
+        title="Upload files"
+        data-testid="upload-toggle"
+      >
+        <Plus size={20} />
+      </button>
+
+      <div className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}>
         <button
           className={`${styles.barBtn} ${liveWallpaper ? styles.liveOn : styles.liveOff}`}
           onClick={() => setLiveWallpaper((prev) => !prev)}

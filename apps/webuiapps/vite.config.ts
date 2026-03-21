@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { join } from 'path';
 import { generateLogFileName, createLogMiddleware } from './src/lib/logPlugin';
+import { appGeneratorPlugin } from './src/lib/appGeneratorPlugin';
 
 const LLM_CONFIG_FILE = resolve(os.homedir(), '.openroom', 'config.json');
 const SESSIONS_DIR = resolve(os.homedir(), '.openroom', 'sessions');
@@ -397,6 +398,11 @@ const config = ({ mode }: ConfigEnv): UserConfigExport => {
     llmProxyPlugin(),
     jsonFilePlugin('characters', '/api/characters', CHARACTERS_FILE),
     jsonFilePlugin('mods', '/api/mods', MODS_FILE),
+    appGeneratorPlugin({
+      llmConfigFile: LLM_CONFIG_FILE,
+      projectRoot: resolve(__dirname, '../..'),
+      srcDir: resolve(__dirname, 'src'),
+    }),
     react(),
     ...(skipLegacy
       ? []
