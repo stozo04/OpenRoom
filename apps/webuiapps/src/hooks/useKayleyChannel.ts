@@ -21,6 +21,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '@/lib/logger'
+import { resolveAppAction, loadActionsFromMeta } from '@/lib/appRegistry'
+import { dispatchAgentAction } from '@/lib/vibeContainerMock'
+import { seedMetaFiles } from '@/lib/seedMeta'
 
 const KAYLEY_WS_URL =
   (import.meta as unknown as { env?: Record<string, string | undefined> }).env
@@ -239,8 +242,86 @@ export function useKayleyChannel(): UseKayleyChannelResult {
       if (msg.type === 'tts_done') {
         logger.info('[KayleyChannel] TTS stream done — draining audio buffer')
       }
+
+      // Phase 2E — Vibe action dispatch from Kayley's brain.
+      // Server sends { type: 'vibe_action', id, app_name, action_type, params }
+      // We run it through OpenRoom's native dispatch layer and echo the result.
+      if (
+        msg.type === 'vibe_action' &&
+        typeof msg.id === 'string' &&
+        typeof msg.app_name === 'string' &&
+        typeof msg.action_type === 'string'
+      ) {
+        const id = msg.id
+        const appName = msg.app_name
+        const actionType = msg.action_type
+        const rawParams = msg.params
+        const params: Record<string, string> =
+          rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+            ? Object.fromEntries(
+                Object.entries(rawParams as Record<string, unknown>).map(([k, v]) => [
+                  k,
+                  typeof v === 'string' ? v : JSON.stringify(v),
+                ]),
+              )
+            : {}
+
+        // Fire-and-forget: the dispatch is async, the echo sends when done.
+        dispatchVibeAction(id, appName, actionType, params)
+      }
     }
   }, [])  // stable — no deps from component scope
+
+  // ── Vibe Action Dispatch (Phase 2E) ──────────────────────────
+  //
+  // Runs Kayley's vibe_action tool call through OpenRoom's native
+  // dispatchAgentAction, then sends the result string back to the channel.
+  // Errors are caught and echoed as 'error: …' so Kayley always gets a
+  // response within the server's 15s timeout window.
+
+  async function dispatchVibeAction(
+    id: string,
+    appName: string,
+    actionType: string,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const ws = wsRef.current
+    const send = (result: string) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'vibe_action_result', id, result }))
+      } else {
+        logger.warn('[KayleyChannel] vibe_action_result dropped — ws not open', { id, result })
+      }
+    }
+
+    try {
+      // Ensure per-app metadata is loaded for future non-OS actions. For OS
+      // actions (SET_WALLPAPER etc.) resolveAppAction works without it, but
+      // doing it here keeps the code forward-compatible and cheap (idempotent).
+      await seedMetaFiles()
+      await loadActionsFromMeta()
+
+      const resolved = resolveAppAction(appName, actionType)
+      if (typeof resolved === 'string') {
+        // resolveAppAction returns an error string for unknown apps.
+        logger.warn('[KayleyChannel] vibe_action resolve failed', { id, appName, actionType, err: resolved })
+        send(resolved)
+        return
+      }
+
+      const result = await dispatchAgentAction({
+        app_id: resolved.appId,
+        action_type: resolved.actionType,
+        params,
+      })
+      logger.info('[KayleyChannel] vibe_action dispatched', { id, appName, actionType, result })
+      send(result)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.warn('[KayleyChannel] vibe_action dispatch threw', { id, appName, actionType, error: message })
+      send(`error: ${message}`)
+    }
+  }
 
   useEffect(() => {
     connectWs()
