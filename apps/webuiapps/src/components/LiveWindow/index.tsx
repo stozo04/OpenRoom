@@ -69,8 +69,12 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
 
   const character = loadCharacterConfigSync();
   const characterName = character?.character_name ?? 'Aoi';
-  // Use the emotion-aware resolver: emotion_videos > emotion_images > base_image_url
-  const characterMedia = character ? resolveEmotionMedia(character) : undefined;
+  // Use the emotion-aware resolver matching ChatPanel's call signature:
+  // pass 'default' explicitly so the resolver hits emotion_videos['default']
+  // before falling through to the generic fallback chain.
+  const characterMedia = character
+    ? resolveEmotionMedia(character, 'default')
+    : undefined;
 
   const toggleMax = useCallback(() => {
     if (maximized) {
