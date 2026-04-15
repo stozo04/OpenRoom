@@ -79,9 +79,22 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
   const charCollection = loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION;
   const character = getActiveCharacter(charCollection);
   const characterName = character?.character_name ?? 'Aoi';
-  const characterMedia = character
+
+  // Live-stream "all-in-one" video — full-frame VTuber loop (the Rea_allinone
+  // pattern). Default to the local /public/live-stream/aoi-live.mp4 asset so
+  // the Live tab feels like watching a real stream. Falls back to the
+  // emotion resolver for characters that ship their own loop in
+  // emotion_videos['live'] or 'default'.
+  const liveLoopUrl =
+    character?.character_meta_info?.emotion_videos?.live?.[0] ??
+    '/live-stream/aoi-live.mp4';
+  const fallbackMedia = character
     ? resolveEmotionMedia(character, 'default')
     : undefined;
+  const characterMedia: { url: string; type: 'video' | 'image' } | undefined =
+    liveLoopUrl
+      ? { url: liveLoopUrl, type: 'video' }
+      : fallbackMedia;
 
   const toggleMax = useCallback(() => {
     if (maximized) {

@@ -13,6 +13,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import ChatPanel from '../ChatPanel';
 import styles from './index.module.scss';
 
@@ -92,15 +93,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
           internal header remains clickable (higher z-index via CSS). */}
       <div className={styles.dragHandle} data-testid="chat-window-drag-handle" />
 
-      {/* Floating max toggle — ChatPanel already has minimize (onClose)
-          wired internally; we just surface a maximize affordance. */}
+      {/* Floating max toggle — uses proper lucide icons (was unicode boxes
+          which rendered inconsistently across fonts and looked broken). */}
       <button
         className={styles.maxBtn}
         onClick={toggleMax}
         title={maximized ? 'Restore' : 'Maximize'}
         data-testid="chat-window-max"
       >
-        {maximized ? '❐' : '▢'}
+        {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
       </button>
 
       <ChatPanel
