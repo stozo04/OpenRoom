@@ -213,6 +213,17 @@ export function getAppDisplayName(appId: number): string {
   return APP_STATIC_REGISTRY.find((a) => a.appId === appId)?.displayName ?? `App ${appId}`;
 }
 
+/**
+ * Reverse-lookup an app's numeric id by its canonical short name
+ * (e.g. "chess" → 12). Case-insensitive. Returns null if no match.
+ */
+export function findAppIdByName(name: string): number | null {
+  if (!name) return null;
+  const needle = name.toLowerCase();
+  const hit = APP_STATIC_REGISTRY.find((a) => a.appName.toLowerCase() === needle);
+  return hit ? hit.appId : null;
+}
+
 export function getAppDefaultSize(appId: number): { width: number; height: number } {
   return (
     APP_STATIC_REGISTRY.find((a) => a.appId === appId)?.defaultSize ?? { width: 600, height: 400 }

@@ -70,6 +70,23 @@ export function onOSEvent(callback: OSEventCallback): () => void {
 // ============ OS Window Manager ============
 
 import { openWindow, closeWindow, getWindows as getWins } from './windowManager';
+import { findAppIdByName } from './appRegistry';
+
+/**
+ * Resolve a caller-supplied app identifier (numeric string like "12" or
+ * a human-friendly app name like "chess") to a numeric app_id. Returns
+ * NaN if the value can't be resolved. Centralizing this here keeps the
+ * OS OPEN_APP / CLOSE_APP handlers tolerant of either shape — Kayley's
+ * brain naturally thinks in app names, while the internal registry is
+ * keyed by numeric id.
+ */
+function resolveTargetAppId(raw: string | undefined): number {
+  if (!raw) return NaN;
+  const asNumber = Number(raw);
+  if (Number.isFinite(asNumber) && asNumber > 0) return asNumber;
+  const byName = findAppIdByName(raw);
+  return byName ?? NaN;
+}
 
 // ============ Listener-Ready Notification ============
 // Tracks callback count at the moment each window was opened so we can detect
@@ -133,13 +150,19 @@ export async function dispatchAgentAction(action: {
   // OS actions (app_id=1) are handled directly here
   if (action.app_id === 1) {
     if (action.action_type === 'OPEN_APP') {
-      const targetAppId = Number(action.params?.app_id);
+      const targetAppId = resolveTargetAppId(action.params?.app_id);
+      if (!Number.isFinite(targetAppId)) {
+        return `error: unknown app_id "${action.params?.app_id ?? ''}" — pass a numeric id or canonical app name (e.g. "chess", "album", "diary")`;
+      }
       openWindow(targetAppId);
       windowOpenSnapshots.set(targetAppId, { callbackCount: agentMessageCallbacks.size });
       return 'success';
     }
     if (action.action_type === 'CLOSE_APP') {
-      const targetAppId = Number(action.params?.app_id);
+      const targetAppId = resolveTargetAppId(action.params?.app_id);
+      if (!Number.isFinite(targetAppId)) {
+        return `error: unknown app_id "${action.params?.app_id ?? ''}" — pass a numeric id or canonical app name (e.g. "chess", "album", "diary")`;
+      }
       closeWindow(targetAppId);
       windowOpenSnapshots.delete(targetAppId);
       return 'success';
