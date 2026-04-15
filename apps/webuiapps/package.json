@@ -21,7 +21,8 @@
     "react-markdown": "^10.1.0",
     "react-rnd": "^10.5.3",
     "rehype-raw": "^7.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "youtube-search-api": "^2.0.1"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

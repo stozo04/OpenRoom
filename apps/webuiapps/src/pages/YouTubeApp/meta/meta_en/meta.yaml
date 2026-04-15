@@ -1,0 +1,33 @@
+app_id: 3
+app_name: youtube
+app_display_name: YouTube
+version: "1.0.0"
+description: >
+  YouTube search and playback. Kayley can search any query — videos, songs,
+  talks, tutorials — and the results render as clickable cards inside this
+  app. Clicking a card embeds the YouTube player inline. Backed by a
+  public-scrape fallback so no API key is required.
+displayDesc: >
+  Search YouTube and play results inline. Kayley drives the search via the
+  SEARCH action; the grid of result cards is clickable.
+
+# ============================================================
+# The following actions are only used for Agent → Frontend commands.
+# ============================================================
+
+actions:
+  - type: SEARCH
+    name: Search YouTube
+    description: >
+      Search YouTube for a query and render the results as a clickable
+      grid of cards inside the YouTube app. Each card embeds the video
+      when clicked. Returns "success" once the search dispatches.
+    params:
+      - name: query
+        type: string
+        description: The search query (free text, e.g. "fleetwood mac landslide live")
+        required: true
+      - name: max_results
+        type: number
+        description: Maximum number of results to return. Default 10, max 25.
+        required: false

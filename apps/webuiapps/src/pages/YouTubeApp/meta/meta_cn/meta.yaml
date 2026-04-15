@@ -1,0 +1,26 @@
+app_id: 3
+app_name: youtube
+app_display_name: YouTube
+version: "1.0.0"
+description: >
+  YouTube 搜索与播放。Kayley 可以搜索任意关键词 —— 视频、歌曲、演讲、教程 ——
+  结果以可点击的卡片形式在应用内展示。点击卡片后内嵌播放器播放视频。
+  无需 API key。
+displayDesc: >
+  搜索 YouTube 并内嵌播放结果。Kayley 通过 SEARCH action 触发搜索。
+
+actions:
+  - type: SEARCH
+    name: 搜索 YouTube
+    description: >
+      搜索 YouTube 并把结果以卡片网格形式渲染在 YouTube 应用里。
+      点击卡片会内嵌播放视频。搜索派发成功后返回 "success"。
+    params:
+      - name: query
+        type: string
+        description: 搜索关键词（自由文本，例如 "fleetwood mac landslide live"）
+        required: true
+      - name: max_results
+        type: number
+        description: 最大返回结果数。默认 10，最大 25。
+        required: false
