@@ -16,7 +16,7 @@
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
 import { Radio, Minus, Maximize2, X, UserPlus } from 'lucide-react';
-import { loadCharacterConfigSync } from '@/lib/characterManager';
+import { loadCharacterConfigSync, resolveEmotionMedia } from '@/lib/characterManager';
 import styles from './index.module.scss';
 
 export interface LiveWindowProps {
@@ -69,8 +69,8 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
 
   const character = loadCharacterConfigSync();
   const characterName = character?.character_name ?? 'Aoi';
-  const characterImg =
-    character?.character_meta_info?.base_image_url ?? '';
+  // Use the emotion-aware resolver: emotion_videos > emotion_images > base_image_url
+  const characterMedia = character ? resolveEmotionMedia(character) : undefined;
 
   const toggleMax = useCallback(() => {
     if (maximized) {
@@ -170,11 +170,20 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
               ))}
             </div>
 
-            {/* RIGHT: character full-body art */}
+            {/* RIGHT: character full-body art (video if available, else image) */}
             <div className={styles.characterSide}>
-              {characterImg ? (
+              {characterMedia?.type === 'video' ? (
+                <video
+                  src={characterMedia.url}
+                  className={styles.characterImg}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : characterMedia?.url ? (
                 <img
-                  src={characterImg}
+                  src={characterMedia.url}
                   alt={characterName}
                   className={styles.characterImg}
                 />
