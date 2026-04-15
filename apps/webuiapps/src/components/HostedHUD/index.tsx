@@ -23,6 +23,7 @@ import { MessageCircle, Radio, Send } from 'lucide-react';
 import { useKayleyChannel } from '@/hooks/useKayleyChannel';
 import { loadCharacterConfigSync } from '@/lib/characterManager';
 import { logger } from '@/lib/logger';
+import LiveWindow from '../LiveWindow';
 import styles from './index.module.scss';
 
 export interface HostedHUDProps {
@@ -44,6 +45,7 @@ type Tab = 'live' | 'chat';
 
 const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
   const [tab, setTab] = useState<Tab>('chat');
+  const [liveOpen, setLiveOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -105,7 +107,10 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
       <div className={styles.tabs} data-testid="hosted-hud-tabs">
         <button
           className={`${styles.tab} ${tab === 'live' ? styles.active : ''}`}
-          onClick={() => setTab('live')}
+          onClick={() => {
+            setTab('live');
+            setLiveOpen(true);
+          }}
           data-testid="tab-live"
         >
           <Radio size={13} />
@@ -125,15 +130,15 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
         </button>
       </div>
 
-      {/* Live tab stub — only visible when Live tab active */}
-      {tab === 'live' && (
-        <div className={styles.liveStub} data-testid="live-stub">
-          <p className={styles.liveStubTitle}>Live — stubbed for v1</p>
-          <p className={styles.liveStubBody}>
-            Viewer comments + viewer count will stream here in a future update.
-          </p>
-        </div>
-      )}
+      {/* Live floating window — draggable + resizable. Visibility is driven
+          by the Live tab toggle; closing the window drops back to Chat tab. */}
+      <LiveWindow
+        visible={liveOpen}
+        onClose={() => {
+          setLiveOpen(false);
+          setTab('chat');
+        }}
+      />
 
       {/* Suggested prompts dock — above the pill input */}
       <div className={styles.promptDock} data-testid="prompt-dock">

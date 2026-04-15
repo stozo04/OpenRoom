@@ -394,7 +394,13 @@ const ChatPanel: React.FC<{
   visible?: boolean;
   zIndex?: number;
   onFocus?: () => void;
-}> = ({ onClose, visible = true, zIndex, onFocus }) => {
+  /**
+   * When true, the panel renders filling its parent (for use inside a
+   * floating/resizable window wrapper like ChatWindow). Defaults to false,
+   * which keeps the legacy right-stuck drawer behavior.
+   */
+  windowed?: boolean;
+}> = ({ onClose, visible = true, zIndex, onFocus, windowed = false }) => {
   // Character + Mod state (collection-based)
   const [charCollection, setCharCollection] = useState<CharacterCollection>(
     () => loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION,
@@ -1130,7 +1136,7 @@ const ChatPanel: React.FC<{
   return (
     <>
       <div
-        className={styles.panel}
+        className={`${styles.panel} ${windowed ? styles.windowed : ''}`}
         data-testid="chat-panel"
         style={zIndex !== null && zIndex !== undefined ? { zIndex } : undefined}
         onMouseDown={onFocus}

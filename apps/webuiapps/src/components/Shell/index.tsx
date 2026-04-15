@@ -21,7 +21,7 @@ import {
   FileArchive,
   type LucideIcon,
 } from 'lucide-react';
-import ChatPanel from '../ChatPanel';
+import ChatWindow from '../ChatWindow';
 import HostedHUD from '../HostedHUD';
 import AppWindow from '../AppWindow';
 import { getWindows, subscribe, openWindow, claimZIndex } from '@/lib/windowManager';
@@ -358,10 +358,12 @@ const Shell: React.FC = () => {
         <AppWindow key={win.appId} win={win} />
       ))}
 
-      {/* Chat Panel — always mounted to preserve chat history */}
-      <ChatPanel
-        onClose={() => setChatOpen(false)}
+      {/* Floating, draggable + resizable Chat window.
+          Replaces the right-stuck drawer. Always mounted when visible so
+          chat history and the Kayley WebSocket stay alive across hide/show. */}
+      <ChatWindow
         visible={chatOpen}
+        onClose={() => setChatOpen(false)}
         zIndex={chatZIndex}
         onFocus={() => setChatZIndex(claimZIndex())}
       />
