@@ -394,7 +394,13 @@ const ChatPanel: React.FC<{
   visible?: boolean;
   zIndex?: number;
   onFocus?: () => void;
-}> = ({ onClose, visible = true, zIndex, onFocus }) => {
+  /**
+   * When true, the panel renders filling its parent (for use inside a
+   * floating/resizable window wrapper like ChatWindow). Defaults to false,
+   * which keeps the legacy right-stuck drawer behavior.
+   */
+  windowed?: boolean;
+}> = ({ onClose, visible = true, zIndex, onFocus, windowed = false }) => {
   // Character + Mod state (collection-based)
   const [charCollection, setCharCollection] = useState<CharacterCollection>(
     () => loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION,
@@ -816,6 +822,22 @@ const ChatPanel: React.FC<{
     [input, loading, config, chatHistory, addMessage, clearKayleySendTimeout],
   );
 
+  // ── Bridge from HostedHUD pill input ──────────────────────────
+  // HostedHUD handles Kayley-connected sends itself. When Kayley is NOT
+  // connected, it dispatches `hosted-hud-send` so the local-LLM fallback
+  // path (handleSend) runs here with full tool-loop support.
+  useEffect(() => {
+    const onHudSend = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ text: string }>).detail;
+      if (!detail?.text) return;
+      handleSend(detail.text);
+    };
+    window.addEventListener('hosted-hud-send', onHudSend as EventListener);
+    return () => {
+      window.removeEventListener('hosted-hud-send', onHudSend as EventListener);
+    };
+  }, [handleSend]);
+
   // Core conversation loop
   const runConversation = async (history: ChatMessage[], cfg: LLMConfig) => {
     await seedMetaFiles();
@@ -1114,7 +1136,7 @@ const ChatPanel: React.FC<{
   return (
     <>
       <div
-        className={styles.panel}
+        className={`${styles.panel} ${windowed ? styles.windowed : ''}`}
         data-testid="chat-panel"
         style={zIndex !== null && zIndex !== undefined ? { zIndex } : undefined}
         onMouseDown={onFocus}

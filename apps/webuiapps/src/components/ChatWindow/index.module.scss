@@ -1,0 +1,42 @@
+.wrapper {
+  background: transparent;
+  /* react-rnd applies inline position/size; this class is for z-index +
+     visual polish only. */
+}
+
+/* A 28px strip across the top of the window that acts as the drag handle.
+   Sits above ChatPanel's internal header visually but below the header's
+   buttons so clicks still register on Reset / Settings / Close. */
+.dragHandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 140px; /* leave room for ChatPanel's header action buttons */
+  height: 28px;
+  cursor: move;
+  z-index: 10;
+  background: transparent;
+}
+
+.maxBtn {
+  position: absolute;
+  top: 10px;
+  right: 48px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 20;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+}
