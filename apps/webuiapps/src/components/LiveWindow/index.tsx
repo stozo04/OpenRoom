@@ -92,8 +92,17 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
       setMaximized(false);
     } else {
       setPreMaxState({ pos, size });
-      setPos({ x: 0, y: 0 });
-      setSize({ width: window.innerWidth, height: window.innerHeight });
+      // Subtract a small inset from viewport dims — react-rnd's bounds="window"
+      // pushes the window off-screen if size exactly equals viewport (no slack
+      // for the bounds check). Also leave room for the dock/taskbar at the
+      // bottom (~80px) so the window doesn't cover OpenRoom's app launcher.
+      const inset = 8;
+      const dockHeight = 80;
+      setPos({ x: inset, y: inset });
+      setSize({
+        width: Math.max(MIN_W, window.innerWidth - inset * 2),
+        height: Math.max(MIN_H, window.innerHeight - inset * 2 - dockHeight),
+      });
       setMaximized(true);
     }
   }, [maximized, preMaxState, pos, size]);
