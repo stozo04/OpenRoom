@@ -1,20 +1,25 @@
 /**
  * ChatWindow — floating, draggable, resizable wrapper around ChatPanel.
  *
- * Replaces the right-stuck drawer behavior with a real window. All chat
- * wiring (useKayleyChannel, local LLM fallback, tool calls, vibe_action
- * round-trip) continues to live inside ChatPanel — ChatWindow is purely a
- * presentational wrapper that positions, drags, and resizes it.
+ * Provides a real window chrome (header + min/max/close) so ChatPanel can
+ * shed its own header in `windowed` mode. All chat wiring (useKayleyChannel,
+ * local LLM fallback, tool calls, vibe_action round-trip) lives inside
+ * ChatPanel; ChatWindow is a presentational shell.
  *
- * The window stays mounted even when hidden (visibility toggled via `visible`
- * prop / avatar orb) so chat history and the Kayley WebSocket connection are
- * preserved.
+ * The window stays mounted even when hidden (visibility toggled via
+ * `visible` prop / avatar orb) so chat history and the Kayley WebSocket
+ * connection are preserved across show/hide.
  */
 
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Minus, Maximize2, X } from 'lucide-react';
 import ChatPanel from '../ChatPanel';
+import {
+  loadCharacterCollectionSync,
+  getActiveCharacter,
+  DEFAULT_COLLECTION as DEFAULT_CHAR_COLLECTION,
+} from '@/lib/characterManager';
 import styles from './index.module.scss';
 
 export interface ChatWindowProps {
@@ -46,6 +51,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
     pos: { x: number; y: number };
     size: { width: number; height: number };
   } | null>(null);
+
+  // Pull character name for the header label so it matches Live's character.
+  const charCollection = loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION;
+  const character = getActiveCharacter(charCollection);
+  const characterName = character?.character_name ?? 'Chat';
 
   const toggleMax = useCallback(() => {
     if (maximized) {
@@ -79,38 +89,59 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
       minWidth={MIN_W}
       minHeight={MIN_H}
       bounds="window"
-      dragHandleClassName={styles.dragHandle}
+      dragHandleClassName={styles.header}
       onDragStop={(_, d) => setPos({ x: d.x, y: d.y })}
       onResizeStop={(_, __, ref, ___, position) => {
         setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
         setPos(position);
       }}
+      onMouseDown={onFocus}
       style={{ zIndex: zIndex ?? 1000 }}
       data-testid="chat-window"
     >
-      {/* Invisible drag strip overlayed across the top so the user can grab
-          the window without hitting ChatPanel's own buttons. ChatPanel's
-          internal header remains clickable (higher z-index via CSS). */}
-      <div className={styles.dragHandle} data-testid="chat-window-drag-handle" />
+      <div className={styles.window}>
+        <div className={styles.header} data-testid="chat-window-header">
+          <div className={styles.headerLeft}>
+            <span>{characterName}</span>
+          </div>
+          <div className={styles.headerRight}>
+            <button
+              className={styles.iconBtn}
+              onClick={onClose}
+              title="Minimize"
+              data-testid="chat-window-min"
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              className={styles.iconBtn}
+              onClick={toggleMax}
+              title={maximized ? 'Restore' : 'Maximize'}
+              data-testid="chat-window-max"
+            >
+              <Maximize2 size={14} />
+            </button>
+            <button
+              className={styles.iconBtn}
+              onClick={onClose}
+              title="Close"
+              data-testid="chat-window-close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
 
-      {/* Floating max toggle — uses proper lucide icons (was unicode boxes
-          which rendered inconsistently across fonts and looked broken). */}
-      <button
-        className={styles.maxBtn}
-        onClick={toggleMax}
-        title={maximized ? 'Restore' : 'Maximize'}
-        data-testid="chat-window-max"
-      >
-        {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-      </button>
-
-      <ChatPanel
-        onClose={onClose}
-        visible={true}
-        zIndex={undefined}
-        onFocus={onFocus}
-        windowed
-      />
+        <div className={styles.body}>
+          <ChatPanel
+            onClose={onClose}
+            visible={true}
+            zIndex={undefined}
+            onFocus={onFocus}
+            windowed
+          />
+        </div>
+      </div>
     </Rnd>
   );
 };

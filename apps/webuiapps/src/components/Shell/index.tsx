@@ -283,6 +283,31 @@ const Shell: React.FC = () => {
     });
   }, []);
 
+  // Hidden file input ref for the "Add Wallpaper" affordance that replaces
+  // the EN/ZH toggle. User picks an image/video file → we read it as a
+  // data URL → setWallpaper applies it to the desktop background.
+  const wallpaperFileRef = useRef<HTMLInputElement | null>(null);
+  const handlePickWallpaperFile = useCallback(() => {
+    wallpaperFileRef.current?.click();
+  }, []);
+  const handleWallpaperFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setWallpaper(reader.result);
+          if (file.type.startsWith('video/')) setLiveWallpaper(true);
+        }
+      };
+      reader.readAsDataURL(file);
+      // Reset the input so picking the same file twice still fires onChange.
+      e.target.value = '';
+    },
+    [],
+  );
+
   useEffect(() => {
     seedMetaFiles();
   }, []);
@@ -478,14 +503,24 @@ const Shell: React.FC = () => {
           {liveWallpaper ? <Video size={16} /> : <VideoOff size={16} />}
         </button>
 
+        {/* Wallpaper file picker — replaces the EN/ZH toggle. Click to upload
+            an image or video to set as the desktop background. */}
         <button
-          className={`${styles.barBtn} ${styles.langBtn}`}
-          onClick={handleToggleLang}
-          title={lang === 'en' ? 'Switch to Chinese' : 'Switch to English'}
-          data-testid="lang-toggle"
+          className={styles.barBtn}
+          onClick={handlePickWallpaperFile}
+          title="Upload a wallpaper image or video"
+          data-testid="wallpaper-upload"
         >
-          {lang === 'en' ? 'EN' : 'ZH'}
+          <Upload size={16} />
         </button>
+        <input
+          ref={wallpaperFileRef}
+          type="file"
+          accept="image/*,video/*"
+          style={{ display: 'none' }}
+          onChange={handleWallpaperFileChange}
+          data-testid="wallpaper-upload-input"
+        />
 
         <button
           className={`${styles.barBtn} ${reportEnabled ? styles.reportOn : styles.reportOff}`}

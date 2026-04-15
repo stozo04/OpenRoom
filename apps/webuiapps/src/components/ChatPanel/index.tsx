@@ -1153,6 +1153,9 @@ const ChatPanel: React.FC<{
 
         {/* Right: Chat */}
         <div className={styles.chatSide}>
+          {/* Internal header hidden in windowed mode — ChatWindow renders
+              its own header with min/max/close. */}
+          {!windowed && (
           <div className={styles.header}>
             <div
               className={styles.headerLeft}
@@ -1218,6 +1221,7 @@ const ChatPanel: React.FC<{
               )}
             </div>
           </div>
+          )}
 
           <div className={styles.messages} data-testid="chat-messages">
             {messages.length === 0 && (

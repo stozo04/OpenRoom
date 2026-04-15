@@ -6,27 +6,38 @@
 .window {
   width: 100%;
   height: 100%;
-  background: #1c1d20;
+  background: #0f0f11;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
+  position: relative;
   overflow: hidden;
   color: #fff;
 }
 
+/* Header sits ON TOP of the video as a transparent overlay — feels like a
+   live-stream camera feed, not a windowed panel. Subtle gradient at top so
+   the badge/buttons stay legible without a hard bar. */
 .header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  background: #141517;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 12px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.18) 70%,
+    rgba(0, 0, 0, 0) 100%
+  );
   cursor: move;
   user-select: none;
-  height: 40px;
-  flex-shrink: 0;
+  height: 44px;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .headerLeft {
@@ -80,31 +91,33 @@
 }
 
 .iconBtn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   border-radius: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
   }
 }
 
-/* Body becomes a stacking context — character video fills the entire area
-   as the background "stream," and comment overlay floats on top. Matches
-   the hosted openroom.ai live-stream layout (full-frame VTuber video with
-   chat overlaid on the lower-left). */
+/* Body fills the entire window — header overlays it as transparent chrome,
+   no flex column. Character video fills the body, comment overlay floats
+   on top. Matches the hosted openroom.ai live-stream layout: full-frame
+   VTuber video with header overlay on top + comments overlaid lower-left. */
 .body {
-  flex: 1;
-  position: relative;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #0f0f11;
 }

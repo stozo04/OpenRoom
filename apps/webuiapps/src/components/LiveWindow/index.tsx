@@ -15,7 +15,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
-import { Radio, Minus, Maximize2, X, UserPlus } from 'lucide-react';
+import { Radio, Minus, Maximize2, X } from 'lucide-react';
 import {
   loadCharacterCollectionSync,
   getActiveCharacter,
@@ -155,15 +155,6 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
             <span className={styles.viewerCount}>{STUB_VIEWER_COUNT}</span>
           </div>
           <div className={styles.headerRight}>
-            <button
-              className={styles.addAgentBtn}
-              onClick={() => { /* v1 stub — no-op */ }}
-              title="Add my Agent (stub)"
-              data-testid="live-window-add-agent"
-            >
-              <UserPlus size={12} />
-              <span>Add my Agent</span>
-            </button>
             <button
               className={styles.iconBtn}
               onClick={() => setMinimized((v) => !v)}

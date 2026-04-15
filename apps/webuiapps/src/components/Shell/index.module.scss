@@ -170,8 +170,8 @@
   transition: transform 0.2s;
 
   &.chatOpen {
-    /* Shift left to account for the chat panel (320px wide) */
-    transform: translateX(calc(-50% - 160px));
+    /* No shift — chat is free-floating (react-rnd) and doesnt push the bar. */
+    transform: translateX(-50%);
   }
 }
 
@@ -281,7 +281,7 @@
   }
 
   &.chatOpen {
-    left: calc(50% - 140px - 160px);
+    left: calc(50% - 140px);
   }
 }
 
