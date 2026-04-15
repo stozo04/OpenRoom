@@ -140,20 +140,9 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
         }}
       />
 
-      {/* Suggested prompts dock — above the pill input */}
-      <div className={styles.promptDock} data-testid="prompt-dock">
-        {STUB_PROMPTS.map((p, i) => (
-          <button
-            key={i}
-            className={styles.promptChip}
-            onClick={() => handleSubmit(p)}
-            disabled={sending}
-            data-testid={`prompt-chip-${i}`}
-          >
-            {p}
-          </button>
-        ))}
-      </div>
+      {/* Suggested prompts dock removed per Steven's preference 2026-04-15 —
+          he wanted a minimal centered-bottom UI with just the pill input.
+          Stub prompt array kept above so it's easy to re-enable later. */}
 
       {/* Centered-bottom yellow pill input */}
       <div className={styles.pillWrap}>

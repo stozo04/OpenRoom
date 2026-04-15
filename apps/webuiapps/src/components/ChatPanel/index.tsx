@@ -10,6 +10,7 @@ import {
   Pencil,
   List,
   Mic,
+  X,
 } from 'lucide-react';
 import { chat, loadConfig, loadConfigSync, saveConfig, type ChatMessage } from '@/lib/llmClient';
 import { useKayleyChannel } from '@/hooks/useKayleyChannel';
@@ -1152,6 +1153,9 @@ const ChatPanel: React.FC<{
 
         {/* Right: Chat */}
         <div className={styles.chatSide}>
+          {/* Internal header hidden in windowed mode — ChatWindow renders
+              its own header with min/max/close. */}
+          {!windowed && (
           <div className={styles.header}>
             <div
               className={styles.headerLeft}
@@ -1165,41 +1169,59 @@ const ChatPanel: React.FC<{
               <ChevronRight size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
             </div>
             <div className={styles.headerActions}>
-              <div onClick={() => setShowModPanel(true)} style={{ cursor: 'pointer' }}>
-                <StageIndicator modManager={modManager} />
-              </div>
-              <button
-                className={styles.iconBtn}
-                onClick={handleResetSession}
-                title="Reset session"
-                data-testid="reset-session"
-              >
-                <RotateCcw size={16} />
-              </button>
-              <button
-                className={styles.iconBtn}
-                onClick={handleClearHistory}
-                title="Clear chat"
-                data-testid="clear-chat"
-              >
-                <Trash2 size={16} />
-              </button>
-              <button
-                className={styles.iconBtn}
-                onClick={() => setShowSettings(true)}
-                title="Settings"
-                data-testid="settings-btn"
-              >
-                <Settings size={16} />
-              </button>
+              {/* Stage / Reset / Clear / Settings / Maximize: only shown in
+                  the original (non-windowed) layout. Steven's windowed UI
+                  prefers a minimal header — Min + Close only. */}
+              {!windowed && (
+                <>
+                  <div onClick={() => setShowModPanel(true)} style={{ cursor: 'pointer' }}>
+                    <StageIndicator modManager={modManager} />
+                  </div>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={handleResetSession}
+                    title="Reset session"
+                    data-testid="reset-session"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={handleClearHistory}
+                    title="Clear chat"
+                    data-testid="clear-chat"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={() => setShowSettings(true)}
+                    title="Settings"
+                    data-testid="settings-btn"
+                  >
+                    <Settings size={16} />
+                  </button>
+                  <button className={styles.iconBtn} title="Maximize">
+                    <Maximize2 size={16} />
+                  </button>
+                </>
+              )}
               <button className={styles.iconBtn} onClick={onClose} title="Minimize">
                 <Minus size={16} />
               </button>
-              <button className={styles.iconBtn} title="Maximize">
-                <Maximize2 size={16} />
-              </button>
+              {windowed && (
+                <button
+                  className={styles.iconBtn}
+                  onClick={onClose}
+                  title="Close"
+                  data-testid="chat-panel-close"
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
           </div>
+          )}
 
           <div className={styles.messages} data-testid="chat-messages">
             {messages.length === 0 && (
@@ -1237,8 +1259,9 @@ const ChatPanel: React.FC<{
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggested Replies */}
-          {suggestedReplies.length > 0 && !loading && (
+          {/* Suggested Replies — hidden in windowed (Kayley) layout per
+              Steven's preference for a minimal chat surface. */}
+          {!windowed && suggestedReplies.length > 0 && !loading && (
             <div className={styles.suggestedReplies}>
               {suggestedReplies.map((reply, i) => (
                 <button key={i} className={styles.suggestedReply} onClick={() => handleSend(reply)}>

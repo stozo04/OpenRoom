@@ -15,7 +15,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
-import { Radio, Minus, Maximize2, X, UserPlus } from 'lucide-react';
+import { Radio, Minus, Maximize2, X } from 'lucide-react';
 import {
   loadCharacterCollectionSync,
   getActiveCharacter,
@@ -79,9 +79,22 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
   const charCollection = loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION;
   const character = getActiveCharacter(charCollection);
   const characterName = character?.character_name ?? 'Aoi';
-  const characterMedia = character
+
+  // Live-stream "all-in-one" video — full-frame VTuber loop (the Rea_allinone
+  // pattern). Default to the local /public/live-stream/aoi-live.mp4 asset so
+  // the Live tab feels like watching a real stream. Falls back to the
+  // emotion resolver for characters that ship their own loop in
+  // emotion_videos['live'] or 'default'.
+  const liveLoopUrl =
+    character?.character_meta_info?.emotion_videos?.live?.[0] ??
+    '/live-stream/aoi-live.mp4';
+  const fallbackMedia = character
     ? resolveEmotionMedia(character, 'default')
     : undefined;
+  const characterMedia: { url: string; type: 'video' | 'image' } | undefined =
+    liveLoopUrl
+      ? { url: liveLoopUrl, type: 'video' }
+      : fallbackMedia;
 
   const toggleMax = useCallback(() => {
     if (maximized) {
@@ -92,8 +105,17 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
       setMaximized(false);
     } else {
       setPreMaxState({ pos, size });
-      setPos({ x: 0, y: 0 });
-      setSize({ width: window.innerWidth, height: window.innerHeight });
+      // Subtract a small inset from viewport dims — react-rnd's bounds="window"
+      // pushes the window off-screen if size exactly equals viewport (no slack
+      // for the bounds check). Also leave room for the dock/taskbar at the
+      // bottom (~80px) so the window doesn't cover OpenRoom's app launcher.
+      const inset = 8;
+      const dockHeight = 80;
+      setPos({ x: inset, y: inset });
+      setSize({
+        width: Math.max(MIN_W, window.innerWidth - inset * 2),
+        height: Math.max(MIN_H, window.innerHeight - inset * 2 - dockHeight),
+      });
       setMaximized(true);
     }
   }, [maximized, preMaxState, pos, size]);
@@ -133,15 +155,6 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
             <span className={styles.viewerCount}>{STUB_VIEWER_COUNT}</span>
           </div>
           <div className={styles.headerRight}>
-            <button
-              className={styles.addAgentBtn}
-              onClick={() => { /* v1 stub — no-op */ }}
-              title="Add my Agent (stub)"
-              data-testid="live-window-add-agent"
-            >
-              <UserPlus size={12} />
-              <span>Add my Agent</span>
-            </button>
             <button
               className={styles.iconBtn}
               onClick={() => setMinimized((v) => !v)}
