@@ -43,6 +43,7 @@ apps/webuiapps/public/kayley-story/
 apps/webuiapps/public/kayley-weeks-index.json
 apps/webuiapps/public/kayley-promises-index.json
 apps/webuiapps/public/kayley-storylines-index.json
+apps/webuiapps/public/kayley-email-index.json
 
 # Internal CI/CD & Scripts
 scripts/
