@@ -16,7 +16,12 @@
 import React, { useState, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
 import { Radio, Minus, Maximize2, X, UserPlus } from 'lucide-react';
-import { loadCharacterConfigSync, resolveEmotionMedia } from '@/lib/characterManager';
+import {
+  loadCharacterCollectionSync,
+  getActiveCharacter,
+  resolveEmotionMedia,
+  DEFAULT_COLLECTION as DEFAULT_CHAR_COLLECTION,
+} from '@/lib/characterManager';
 import styles from './index.module.scss';
 
 export interface LiveWindowProps {
@@ -67,11 +72,13 @@ const LiveWindow: React.FC<LiveWindowProps> = ({ visible, onClose, zIndex, onFoc
     size: { width: number; height: number };
   } | null>(null);
 
-  const character = loadCharacterConfigSync();
+  // Match ChatPanel's load pattern: get the collection with DEFAULT fallback,
+  // then pull the active character. loadCharacterConfigSync alone returns null
+  // when localStorage is empty (fresh install) — that's why the placeholder
+  // was firing here while ChatWindow rendered Aoi fine.
+  const charCollection = loadCharacterCollectionSync() ?? DEFAULT_CHAR_COLLECTION;
+  const character = getActiveCharacter(charCollection);
   const characterName = character?.character_name ?? 'Aoi';
-  // Use the emotion-aware resolver matching ChatPanel's call signature:
-  // pass 'default' explicitly so the resolver hits emotion_videos['default']
-  // before falling through to the generic fallback chain.
   const characterMedia = character
     ? resolveEmotionMedia(character, 'default')
     : undefined;
