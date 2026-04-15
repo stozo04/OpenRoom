@@ -87,6 +87,10 @@ import CharacterPanel from './CharacterPanel';
 import ModPanel from './ModPanel';
 import styles from './index.module.scss';
 
+// If the Kayley brain (MCP) doesn't respond within this window we release the
+// UI so `loading` can't stick forever.
+const KAYLEY_SEND_TIMEOUT_MS = 90_000;
+
 // ---------------------------------------------------------------------------
 // Extended DisplayMessage with character-specific fields
 // ---------------------------------------------------------------------------
@@ -641,18 +645,36 @@ const ChatPanel: React.FC<{
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  // ── Kayley send timeout ───────────────────────────────────────
+  // If the Kayley brain stalls (MCP doesn't reply), clear `loading` after
+  // KAYLEY_SEND_TIMEOUT_MS so the UI doesn't lock forever. Cleared whenever a
+  // new reply arrives or the component unmounts.
+  const kayleySendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearKayleySendTimeout = useCallback(() => {
+    if (kayleySendTimeoutRef.current) {
+      clearTimeout(kayleySendTimeoutRef.current);
+      kayleySendTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clearKayleySendTimeout();
+  }, [clearKayleySendTimeout]);
+
   // ── Kayley response handler ───────────────────────────────────
   // Each new latestMessage is a unique object (different timestamp), so this
   // effect fires exactly once per incoming reply.
   useEffect(() => {
     if (!kayley.latestMessage) return;
+    clearKayleySendTimeout();
     addMessage({
       id: String(kayley.latestMessage.timestamp),
       role: 'assistant',
       content: kayley.latestMessage.text,
     });
     setLoading(false);
-  }, [kayley.latestMessage, addMessage]);
+  }, [kayley.latestMessage, addMessage, clearKayleySendTimeout]);
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -741,6 +763,20 @@ const ChatPanel: React.FC<{
         addMessage({ id: String(Date.now()), role: 'user', content: text });
         setLoading(true);
         kRef.sendText(text);
+
+        // 90-second stall guard — if MCP doesn't reply, release the UI and
+        // surface an inline notice. Cleared when latestMessage arrives or on unmount.
+        clearKayleySendTimeout();
+        kayleySendTimeoutRef.current = setTimeout(() => {
+          kayleySendTimeoutRef.current = null;
+          setLoading(false);
+          addMessage({
+            id: String(Date.now()),
+            role: 'assistant',
+            content:
+              "Kayley's thinking took too long — try again or check the connection.",
+          });
+        }, KAYLEY_SEND_TIMEOUT_MS);
         return;
       }
 
@@ -777,7 +813,7 @@ const ChatPanel: React.FC<{
         setLoading(false);
       }
     },
-    [input, loading, config, chatHistory, addMessage],
+    [input, loading, config, chatHistory, addMessage, clearKayleySendTimeout],
   );
 
   // Core conversation loop
@@ -1196,7 +1232,28 @@ const ChatPanel: React.FC<{
               <span className={styles.sttDraftText}>{kayley.sttDraft}</span>
               <button
                 className={styles.sttDraftConfirm}
-                onClick={() => { handleSend(kayley.sttDraft!); kayley.dismissDraft(); }}
+                onClick={() => {
+                  // Confirm via the hook so its `confirmDraft` side-effects
+                  // (resetPlayback + sendText + draft clear) stay co-located.
+                  // We still do UI bookkeeping here so the user bubble appears
+                  // and the send-stall guard is armed.
+                  const draft = kayley.sttDraft;
+                  if (!draft || loading) return;
+                  addMessage({ id: String(Date.now()), role: 'user', content: draft });
+                  setLoading(true);
+                  clearKayleySendTimeout();
+                  kayleySendTimeoutRef.current = setTimeout(() => {
+                    kayleySendTimeoutRef.current = null;
+                    setLoading(false);
+                    addMessage({
+                      id: String(Date.now()),
+                      role: 'assistant',
+                      content:
+                        "Kayley's thinking took too long — try again or check the connection.",
+                    });
+                  }, KAYLEY_SEND_TIMEOUT_MS);
+                  kayley.confirmDraft();
+                }}
                 data-testid="stt-confirm-btn"
               >
                 Send

@@ -22,7 +22,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '@/lib/logger'
 
-const KAYLEY_WS_URL = 'ws://localhost:5180'
+const KAYLEY_WS_URL =
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_KAYLEY_WS_URL ?? 'ws://localhost:5180'
 const TTS_SAMPLE_RATE = 24000  // voice engine outputs 24kHz PCM
 const MIC_SAMPLE_RATE = 16000  // Whisper STT expects 16kHz PCM
 const TTS_BUFFER_DELAY_MS = 600  // ms to buffer before starting playback
@@ -178,6 +180,7 @@ export function useKayleyChannel(): UseKayleyChannelResult {
       ws = new WebSocket(KAYLEY_WS_URL)
     } catch (err: unknown) {
       logger.warn('[KayleyChannel] WebSocket construction failed:', err)
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = setTimeout(connectWs, RECONNECT_DELAY_MS)
       return
     }
@@ -197,18 +200,23 @@ export function useKayleyChannel(): UseKayleyChannelResult {
       setIsRecording(false)
       isRecordingRef.current = false
       logger.info('[KayleyChannel] Disconnected — reconnecting in', RECONNECT_DELAY_MS, 'ms')
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = setTimeout(connectWs, RECONNECT_DELAY_MS)
     }
 
-    ws.onerror = () => {
-      // close event will follow; error itself is not actionable here
+    ws.onerror = (event) => {
+      logger.warn('[KayleyChannel] WebSocket error — close will follow', event)
     }
 
     ws.onmessage = (event) => {
       let msg: Record<string, unknown>
       try {
         msg = JSON.parse(event.data as string)
-      } catch {
+      } catch (err) {
+        logger.warn('[KayleyChannel] malformed ws message', {
+          error: (err as Error).message,
+          raw: typeof event.data === 'string' ? event.data.slice(0, 100) : '<binary>',
+        })
         return
       }
 
@@ -237,7 +245,36 @@ export function useKayleyChannel(): UseKayleyChannelResult {
   useEffect(() => {
     connectWs()
     return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (bufferTimerRef.current) {
+        clearTimeout(bufferTimerRef.current)
+        bufferTimerRef.current = null
+      }
+      // Stop mic tracks so browser's recording LED turns off
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop())
+        micStreamRef.current = null
+      }
+      if (micProcessorRef.current) {
+        try { micProcessorRef.current.disconnect() } catch { /* already disconnected */ }
+        micProcessorRef.current = null
+      }
+      // Close AudioContexts — browsers cap ~6 per tab
+      if (micContextRef.current) {
+        micContextRef.current.close().catch((err: unknown) => {
+          logger.warn('[KayleyChannel] mic AudioContext close error on unmount:', err)
+        })
+        micContextRef.current = null
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch((err: unknown) => {
+          logger.warn('[KayleyChannel] TTS AudioContext close error on unmount:', err)
+        })
+        audioCtxRef.current = null
+      }
       wsRef.current?.close()
     }
   }, [connectWs])
@@ -250,6 +287,10 @@ export function useKayleyChannel(): UseKayleyChannelResult {
       logger.warn('[KayleyChannel] sendText called but WebSocket is not open')
       return
     }
+    // Prime the TTS AudioContext inside this user-gesture call so the first
+    // TTS response isn't blocked by Chrome/Safari autoplay policies.
+    // initAudioPlayback() is idempotent (guards on audioCtxRef + state).
+    initAudioPlayback()
     resetPlayback()
     ws.send(JSON.stringify({
       type: 'text',
@@ -275,6 +316,9 @@ export function useKayleyChannel(): UseKayleyChannelResult {
       micStreamRef.current = stream
 
       const ctx = new AudioContext({ sampleRate: MIC_SAMPLE_RATE })
+      // Firefox (and some other browsers) don't always honor the requested
+      // sample rate — log the actual achieved rate for debugging.
+      logger.info('[KayleyChannel] mic AudioContext sampleRate:', ctx.sampleRate)
       micContextRef.current = ctx
       const source = ctx.createMediaStreamSource(stream)
 
