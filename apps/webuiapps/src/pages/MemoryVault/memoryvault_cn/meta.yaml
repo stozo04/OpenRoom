@@ -1,0 +1,10 @@
+app_id: 16
+app_name: memoryvault
+app_display_name: Memory Vault
+version: "0.1.0"
+description: >
+  Captured moments, weekly reflections, promises, the artifacts of us. Placeholder stub for v1.
+displayDesc: >
+  A vault of captured moments, weekly reflections, and promises — the artifacts of Steven and Kayley.
+
+actions: []
