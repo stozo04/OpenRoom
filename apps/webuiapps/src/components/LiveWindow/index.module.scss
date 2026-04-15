@@ -97,50 +97,25 @@
   }
 }
 
+/* Body becomes a stacking context — character video fills the entire area
+   as the background "stream," and comment overlay floats on top. Matches
+   the hosted openroom.ai live-stream layout (full-frame VTuber video with
+   chat overlaid on the lower-left). */
 .body {
   flex: 1;
-  display: flex;
-  flex-direction: row;
+  position: relative;
   min-height: 0;
-}
-
-.commentList {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.comment {
-  display: flex;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.commentUser {
-  color: #7fd4ff;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.commentText {
-  color: rgba(255, 255, 255, 0.85);
-  word-break: break-word;
+  overflow: hidden;
+  background: #0f0f11;
 }
 
 .characterSide {
-  width: 50%;
-  min-width: 160px;
-  max-width: 320px;
-  background: #0f0f11;
-  position: relative;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
   overflow: hidden;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .characterImg {
@@ -158,4 +133,52 @@
   justify-content: center;
   font-size: 72px;
   color: rgba(255, 255, 255, 0.15);
+}
+
+/* Comment overlay — floats on top of the video, lower-left, semi-transparent.
+   Fades to fully transparent at the top so older comments dissolve into the
+   stream. Limited width so it doesn't cover the character. */
+.commentList {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: min(45%, 240px);
+  max-height: 60%;
+  z-index: 1;
+  padding: 8px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  border-radius: 6px;
+  pointer-events: auto;
+  backdrop-filter: blur(2px);
+  /* Hide scrollbar but keep functional */
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+.comment {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.commentUser {
+  color: #7fd4ff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.commentText {
+  color: rgba(255, 255, 255, 0.95);
+  word-break: break-word;
 }
