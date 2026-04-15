@@ -148,6 +148,26 @@ const APP_STATIC_REGISTRY: AppStaticDef[] = [
     color: '#FAEA5F',
     defaultSize: { width: 1100, height: 750 },
   },
+  {
+    appId: 15,
+    appName: 'bookwriter',
+    route: '/bookwriter',
+    displayName: 'Book Writer',
+    sourceDir: 'BookWriter',
+    icon: 'BookOpen',
+    color: '#d4a574',
+    defaultSize: { width: 880, height: 600 },
+  },
+  {
+    appId: 16,
+    appName: 'memoryvault',
+    route: '/memoryvault',
+    displayName: 'Memory Vault',
+    sourceDir: 'MemoryVault',
+    icon: 'Heart',
+    color: '#ff7aa2',
+    defaultSize: { width: 880, height: 600 },
+  },
 ];
 
 // OS actions are built-in system actions, not from meta.yaml

@@ -3,11 +3,12 @@ app_name: musicPlayer
 app_display_name: Music Player
 version: "1.0.0"
 description: >
-  Music player app. Songs stored in songs/, playlists in playlists/, state.json holds playback progress and mode.
+  Music player with a special "Songs From Kayley" playlist (Landslide pinned). Amazon Music integration planned.
+  Songs stored in songs/, playlists in playlists/, state.json holds playback progress and mode.
   Supports PLAY_SONG/PAUSE/RESUME/SEEK/SET_VOLUME operation actions, song and playlist CRUD/REFRESH actions, and SYNC_STATE system action.
   This file only defines action commands sent from Agent to frontend. User local operations are handled and reported by frontend code.
 displayDesc: >
-  A minimalist music player with song management, custom playlists, and multiple play modes for an immersive listening experience.
+  A minimalist music player featuring the "Songs From Kayley" playlist — a personal-curated mix for Steven with Landslide pinned at the top. Custom playlists and multiple play modes for an immersive listening experience.
 
 # ============================================================
 # The following actions are only used for Agent → Frontend commands.

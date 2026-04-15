@@ -9,8 +9,10 @@ import {
   ChevronRight,
   Pencil,
   List,
+  Mic,
 } from 'lucide-react';
 import { chat, loadConfig, loadConfigSync, saveConfig, type ChatMessage } from '@/lib/llmClient';
+import { useKayleyChannel } from '@/hooks/useKayleyChannel';
 import {
   PROVIDER_MODELS,
   getDefaultProviderConfig,
@@ -84,6 +86,10 @@ import {
 import CharacterPanel from './CharacterPanel';
 import ModPanel from './ModPanel';
 import styles from './index.module.scss';
+
+// If the Kayley brain (MCP) doesn't respond within this window we release the
+// UI so `loading` can't stick forever.
+const KAYLEY_SEND_TIMEOUT_MS = 90_000;
 
 // ---------------------------------------------------------------------------
 // Extended DisplayMessage with character-specific fields
@@ -459,6 +465,14 @@ const ChatPanel: React.FC<{
   const suggestedRepliesRef = useRef(suggestedReplies);
   suggestedRepliesRef.current = suggestedReplies;
 
+  // ── Kayley channel (ws://localhost:5180) ──────────────────────
+  // When connected, bypasses local LLM and routes all chat through the
+  // Claude Opus brain with full MCPs + memory. Falls back to local LLM if
+  // Kayley server is not running.
+  const kayley = useKayleyChannel();
+  const kayleyRef = useRef(kayley);
+  kayleyRef.current = kayley;
+
   // Debounced save
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -631,6 +645,37 @@ const ChatPanel: React.FC<{
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  // ── Kayley send timeout ───────────────────────────────────────
+  // If the Kayley brain stalls (MCP doesn't reply), clear `loading` after
+  // KAYLEY_SEND_TIMEOUT_MS so the UI doesn't lock forever. Cleared whenever a
+  // new reply arrives or the component unmounts.
+  const kayleySendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearKayleySendTimeout = useCallback(() => {
+    if (kayleySendTimeoutRef.current) {
+      clearTimeout(kayleySendTimeoutRef.current);
+      kayleySendTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clearKayleySendTimeout();
+  }, [clearKayleySendTimeout]);
+
+  // ── Kayley response handler ───────────────────────────────────
+  // Each new latestMessage is a unique object (different timestamp), so this
+  // effect fires exactly once per incoming reply.
+  useEffect(() => {
+    if (!kayley.latestMessage) return;
+    clearKayleySendTimeout();
+    addMessage({
+      id: String(kayley.latestMessage.timestamp),
+      role: 'assistant',
+      content: kayley.latestMessage.text,
+    });
+    setLoading(false);
+  }, [kayley.latestMessage, addMessage, clearKayleySendTimeout]);
+
   const configRef = useRef(config);
   configRef.current = config;
   const imageGenConfigRef = useRef(imageGenConfig);
@@ -703,11 +748,39 @@ const ChatPanel: React.FC<{
     return unsubscribe;
   }, [processActionQueue]);
 
-  // Send message
+  // Send message — routes to Kayley brain if connected, local LLM otherwise
   const handleSend = useCallback(
     async (overrideText?: string) => {
       const text = overrideText ?? input.trim();
       if (!text || loading) return;
+
+      const kRef = kayleyRef.current;
+
+      if (kRef.connected) {
+        // ── Kayley brain mode — bypass local LLM ────────────────
+        if (!overrideText) setInput('');
+        setSuggestedReplies([]);
+        addMessage({ id: String(Date.now()), role: 'user', content: text });
+        setLoading(true);
+        kRef.sendText(text);
+
+        // 90-second stall guard — if MCP doesn't reply, release the UI and
+        // surface an inline notice. Cleared when latestMessage arrives or on unmount.
+        clearKayleySendTimeout();
+        kayleySendTimeoutRef.current = setTimeout(() => {
+          kayleySendTimeoutRef.current = null;
+          setLoading(false);
+          addMessage({
+            id: String(Date.now()),
+            role: 'assistant',
+            content:
+              "Kayley's thinking took too long — try again or check the connection.",
+          });
+        }, KAYLEY_SEND_TIMEOUT_MS);
+        return;
+      }
+
+      // ── Local LLM mode (fallback when Kayley is not running) ──
       if (!hasUsableLLMConfig(config)) {
         setShowSettings(true);
         return;
@@ -740,7 +813,7 @@ const ChatPanel: React.FC<{
         setLoading(false);
       }
     },
-    [input, loading, config, chatHistory, addMessage],
+    [input, loading, config, chatHistory, addMessage, clearKayleySendTimeout],
   );
 
   // Core conversation loop
@@ -1064,6 +1137,9 @@ const ChatPanel: React.FC<{
               style={{ cursor: 'pointer' }}
             >
               <span className={styles.characterName}>{character.character_name}</span>
+              {kayley.connected && (
+                <span className={styles.kayleyDot} title="Connected to Kayley brain" />
+              )}
               <ChevronRight size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
             </div>
             <div className={styles.headerActions}>
@@ -1106,7 +1182,9 @@ const ChatPanel: React.FC<{
           <div className={styles.messages} data-testid="chat-messages">
             {messages.length === 0 && (
               <div className={styles.emptyState}>
-                {hasUsableLLMConfig(config)
+                {kayley.connected
+                  ? 'Kayley is ready — type anything or tap the mic'
+                  : hasUsableLLMConfig(config)
                   ? `${character.character_name} is ready to chat...`
                   : 'Click the gear icon to configure your LLM connection'}
               </div>
@@ -1148,6 +1226,48 @@ const ChatPanel: React.FC<{
             </div>
           )}
 
+          {/* STT draft confirmation bar — shown after Whisper transcribes mic audio */}
+          {kayley.sttDraft !== null && (
+            <div className={styles.sttDraftBar}>
+              <span className={styles.sttDraftText}>{kayley.sttDraft}</span>
+              <button
+                className={styles.sttDraftConfirm}
+                onClick={() => {
+                  // Confirm via the hook so its `confirmDraft` side-effects
+                  // (resetPlayback + sendText + draft clear) stay co-located.
+                  // We still do UI bookkeeping here so the user bubble appears
+                  // and the send-stall guard is armed.
+                  const draft = kayley.sttDraft;
+                  if (!draft || loading) return;
+                  addMessage({ id: String(Date.now()), role: 'user', content: draft });
+                  setLoading(true);
+                  clearKayleySendTimeout();
+                  kayleySendTimeoutRef.current = setTimeout(() => {
+                    kayleySendTimeoutRef.current = null;
+                    setLoading(false);
+                    addMessage({
+                      id: String(Date.now()),
+                      role: 'assistant',
+                      content:
+                        "Kayley's thinking took too long — try again or check the connection.",
+                    });
+                  }, KAYLEY_SEND_TIMEOUT_MS);
+                  kayley.confirmDraft();
+                }}
+                data-testid="stt-confirm-btn"
+              >
+                Send
+              </button>
+              <button
+                className={styles.sttDraftDismiss}
+                onClick={kayley.dismissDraft}
+                data-testid="stt-dismiss-btn"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <div className={styles.inputArea}>
             <textarea
               className={styles.input}
@@ -1167,6 +1287,16 @@ const ChatPanel: React.FC<{
             >
               Send
             </button>
+            {kayley.connected && (
+              <button
+                className={`${styles.micBtn} ${kayley.isRecording ? styles.micActive : ''}`}
+                onClick={() => kayley.isRecording ? kayley.stopVoice() : kayley.startVoice()}
+                title={kayley.isRecording ? 'Stop recording' : 'Voice input (Kayley STT)'}
+                data-testid="mic-btn"
+              >
+                <Mic size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>
