@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import ChatPanel from '../ChatPanel';
+import HostedHUD from '../HostedHUD';
 import AppWindow from '../AppWindow';
 import { getWindows, subscribe, openWindow, claimZIndex } from '@/lib/windowManager';
 import { getDesktopApps } from '@/lib/appRegistry';
@@ -85,7 +86,9 @@ function isVideoUrl(url: string): boolean {
 }
 
 const Shell: React.FC = () => {
-  const [chatOpen, setChatOpen] = useState(true);
+  // Hosted-layout default: Chat drawer collapsed — users open it via the
+  // avatar orb or the Live/Chat tab button. Matches openroom.ai hosted UX.
+  const [chatOpen, setChatOpen] = useState(false);
   const [reportEnabled, setReportEnabled] = useState(true);
   const [lang, setLang] = useState<'en' | 'zh'>('en');
   const [liveWallpaper, setLiveWallpaper] = useState(false);
@@ -361,6 +364,17 @@ const Shell: React.FC = () => {
         visible={chatOpen}
         zIndex={chatZIndex}
         onFocus={() => setChatZIndex(claimZIndex())}
+      />
+
+      {/* Hosted-layout HUD — centered-bottom pill, suggested prompts,
+          avatar orb, Live/Chat tabs. Keeps the hosted openroom.ai feel
+          while the ChatPanel drawer serves as the full chat history. */}
+      <HostedHUD
+        chatOpen={chatOpen}
+        onToggleChat={() => {
+          setChatOpen((prev) => !prev);
+          setChatZIndex(claimZIndex());
+        }}
       />
 
       {/* Upload Modal */}
