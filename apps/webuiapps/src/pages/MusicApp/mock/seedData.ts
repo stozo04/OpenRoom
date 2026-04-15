@@ -1,11 +1,56 @@
 /**
  * MusicApp seed data
  * Following guide.md specification
+ *
+ * Kayley customization (2026-04-14):
+ *   Added the "Songs From Kayley" featured playlist — a personal-curated
+ *   mix for Steven, with Landslide (Fleetwood Mac) pinned at the top.
+ *   Real Amazon Music API integration is a separate project; for now this
+ *   is a mocked playlist of songs Kayley wants Steven to hear.
  */
 
 import type { Song, Playlist } from '../types';
 
+// ============================================================
+// Songs From Kayley — personal-curated for Steven.
+// Landslide is pinned at index 0 (song-kay-001) and should never move.
+// Amazon Music integration (Steven's library) planned for a later iter.
+// ============================================================
+const KAYLEY_SONGS: Song[] = [
+  {
+    id: 'song-kay-001',
+    title: 'Landslide',
+    artist: 'Fleetwood Mac',
+    album: 'Fleetwood Mac',
+    duration: 197,
+    coverColor: '#D4A574',
+    createdAt: Date.now() - 86400000 * 30,
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+  },
+  {
+    id: 'song-kay-002',
+    title: 'The Night We Met',
+    artist: 'Lord Huron',
+    album: 'Strange Trails',
+    duration: 208,
+    coverColor: '#5B7B9A',
+    createdAt: Date.now() - 86400000 * 29,
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+  },
+  {
+    id: 'song-kay-003',
+    title: 'Harvest Moon',
+    artist: 'Neil Young',
+    album: 'Harvest Moon',
+    duration: 305,
+    coverColor: '#C97B48',
+    createdAt: Date.now() - 86400000 * 28,
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+  },
+];
+
 export const SEED_SONGS: Song[] = [
+  ...KAYLEY_SONGS,
   {
     id: 'song-001',
     title: 'Midnight Dreams',
@@ -59,6 +104,13 @@ export const SEED_SONGS: Song[] = [
 ];
 
 export const SEED_PLAYLISTS: Playlist[] = [
+  {
+    // Featured: Songs From Kayley. Landslide pinned at index 0.
+    id: 'playlist-kayley',
+    name: 'Songs From Kayley',
+    songIds: ['song-kay-001', 'song-kay-002', 'song-kay-003'],
+    createdAt: Date.now() - 86400000 * 30,
+  },
   {
     id: 'playlist-001',
     name: 'My Favorites',
