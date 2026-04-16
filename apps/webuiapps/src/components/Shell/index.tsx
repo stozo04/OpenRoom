@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useSyncExternalStore }
 import {
   MessageCircle,
   Twitter,
+  Youtube,
   Flame,
   Music,
   BookOpen,
@@ -51,8 +52,9 @@ function useWindows() {
 }
 
 /** Lucide icon name to component mapping */
-const ICON_MAP: Record<string, LucideIcon> = {
+export const ICON_MAP: Record<string, LucideIcon> = {
   Twitter,
+  Youtube,
   Music,
   BookOpen,
   Image,
