@@ -3,7 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import en from './en';
 import zh from './zh';
 
-const NAMESPACE = 'musicApp';
+const NAMESPACE = 'youtubeApp';
 
 // Only initialize i18next if not already initialized
 if (!i18n.isInitialized) {

@@ -5,7 +5,7 @@ import { cleanNil } from '@/utils/nil';
 const Shell = lazy(() => import('@/components/Shell'));
 const Home = lazy(() => import('@/pages/Home'));
 const Twitter = lazy(() => import('@/pages/Twitter'));
-const MusicApp = lazy(() => import('@/pages/MusicApp'));
+const YouTubeApp = lazy(() => import('@/pages/YouTubeApp'));
 const Diary = lazy(() => import('@/pages/Diary'));
 const Album = lazy(() => import('@/pages/Album'));
 const FreeCell = lazy(() => import('@/pages/FreeCell'));
@@ -37,10 +37,10 @@ const routerList: RouteObject[] = [
     ),
   },
   {
-    path: '/musicPlayer',
+    path: '/youtube',
     element: (
       <React.Suspense>
-        <MusicApp />
+        <YouTubeApp />
       </React.Suspense>
     ),
   },
