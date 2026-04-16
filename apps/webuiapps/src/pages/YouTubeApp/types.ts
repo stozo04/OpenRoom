@@ -22,4 +22,55 @@ export interface YouTubeAppState {
   error: string | null;
   /** video_id of currently playing embed, or null when showing the results grid. */
   playingVideoId: string | null;
+  /** Ordered queue of video ids. The currently playing id is at queueIndex. */
+  queue: string[];
+  queueIndex: number;
+}
+
+// ============ YouTube IFrame Player API — minimal typings ============
+// Upstream ships no first-class types; we declare only what we call.
+
+export interface YTPlayer {
+  playVideo: () => void;
+  pauseVideo: () => void;
+  stopVideo: () => void;
+  loadVideoById: (videoId: string | { videoId: string }) => void;
+  cueVideoById: (videoId: string) => void;
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
+  destroy: () => void;
+}
+
+export interface YTPlayerConstructorOptions {
+  videoId?: string;
+  height?: string | number;
+  width?: string | number;
+  playerVars?: Record<string, string | number>;
+  events?: {
+    onReady?: (event: { target: YTPlayer }) => void;
+    onStateChange?: (event: { data: number; target: YTPlayer }) => void;
+    onError?: (event: { data: number }) => void;
+  };
+}
+
+export interface YTNamespace {
+  Player: new (
+    elementId: string | HTMLElement,
+    options: YTPlayerConstructorOptions,
+  ) => YTPlayer;
+  PlayerState: {
+    UNSTARTED: -1;
+    ENDED: 0;
+    PLAYING: 1;
+    PAUSED: 2;
+    BUFFERING: 3;
+    CUED: 5;
+  };
+}
+
+declare global {
+  interface Window {
+    YT?: YTNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
 }
