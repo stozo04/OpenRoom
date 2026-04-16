@@ -38,8 +38,8 @@ const MARGIN = 24;
 function getDefaultPos() {
   if (typeof window === 'undefined') return { x: 100, y: 100 };
   return {
-    x: Math.max(MARGIN, window.innerWidth - DEFAULT_W - MARGIN),
-    y: Math.max(MARGIN, window.innerHeight - DEFAULT_H - 120),
+    x: Math.max(MARGIN, Math.floor((window.innerWidth - DEFAULT_W) / 2)),
+    y: Math.max(MARGIN, Math.floor((window.innerHeight - DEFAULT_H) / 2)),
   };
 }
 

@@ -19,6 +19,7 @@ import {
   Upload,
   FileImage,
   FileArchive,
+  GripHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import ChatWindow from '../ChatWindow';
@@ -99,6 +100,8 @@ const Shell: React.FC = () => {
   const [extractResult, setExtractResult] = useState<ExtractResult | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [modGenerating, setModGenerating] = useState(false);
+  const [barPos, setBarPos] = useState<{ x: number; y: number } | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,6 +290,29 @@ const Shell: React.FC = () => {
 
   useEffect(() => {
     seedMetaFiles();
+  }, []);
+
+  const handleBarDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = barRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const startPosX = rect.left;
+    const startPosY = rect.top;
+    setBarPos({ x: startPosX, y: startPosY });
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      setBarPos({
+        x: startPosX + ev.clientX - startX,
+        y: startPosY + ev.clientY - startY,
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   // Pause user action reporting while upload or mod generation is in progress
@@ -484,7 +510,22 @@ const Shell: React.FC = () => {
         </div>
       )}
 
-      <div className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}>
+      <div
+        ref={barRef}
+        className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}
+        style={
+          barPos
+            ? { position: 'fixed', left: barPos.x, top: barPos.y, transform: 'none', bottom: 'auto' }
+            : undefined
+        }
+      >
+        <div
+          className={styles.barDragGrip}
+          onMouseDown={handleBarDragStart}
+          title="Drag to reposition"
+        >
+          <GripHorizontal size={14} />
+        </div>
         <button
           className={`${styles.barBtn} ${liveWallpaper ? styles.liveOn : styles.liveOff}`}
           onClick={() => setLiveWallpaper((prev) => !prev)}

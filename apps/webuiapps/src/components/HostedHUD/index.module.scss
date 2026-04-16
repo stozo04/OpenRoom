@@ -122,11 +122,33 @@ $hud-z: 50000;
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 32px;
+  /* Default sits above the bottom bar (~52px tall at bottom: 16px) */
+  bottom: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* Must exceed bottomBar z-index (99999) so it renders on top */
+  z-index: 100001;
+}
+
+.pillDragHandle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  z-index: $hud-z;
+  justify-content: center;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: grab;
+  padding: 2px 0;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
 }
 
 .pill {
