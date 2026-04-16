@@ -101,7 +101,6 @@ const Shell: React.FC = () => {
   const [extracting, setExtracting] = useState(false);
   const [modGenerating, setModGenerating] = useState(false);
   const [barPos, setBarPos] = useState<{ x: number; y: number } | null>(null);
-  const barRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
