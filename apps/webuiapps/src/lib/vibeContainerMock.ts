@@ -167,6 +167,16 @@ export async function dispatchAgentAction(action: {
       windowOpenSnapshots.delete(targetAppId);
       return 'success';
     }
+    if (action.action_type === 'SET_OPACITY') {
+      const raw = action.params?.opacity;
+      const parsed = typeof raw === 'string' ? Number(raw) : NaN;
+      if (!Number.isFinite(parsed)) {
+        return 'error: SET_OPACITY requires numeric opacity param in [0.0, 1.0]';
+      }
+      const clamped = Math.max(0, Math.min(1, parsed));
+      osEventCallbacks.forEach((cb) => cb({ type: 'SET_OPACITY', opacity: clamped }));
+      return 'success';
+    }
     if (action.action_type === 'SET_WALLPAPER') {
       const url = action.params?.wallpaper_url;
       if (!url) return 'error: missing wallpaper_url';

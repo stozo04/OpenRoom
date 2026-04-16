@@ -319,11 +319,21 @@ const Shell: React.FC = () => {
     setReportEnabled(shouldListen);
   }, [uploadOpen, modGenerating]);
 
+  // Wallpaper dimmer scrim — 0 = fully bright, 1 = fully dark. Driven by
+  // the os/SET_OPACITY vibe action so Kayley can create ambient / date-night
+  // vibes on the desktop without touching individual app windows.
+  const [wallpaperDim, setWallpaperDim] = useState<number>(0);
+
   // Listen for OS events (e.g. wallpaper changes from agent)
   useEffect(() => {
     return onOSEvent((event) => {
       if (event.type === 'SET_WALLPAPER' && typeof event.wallpaper_url === 'string') {
         setWallpaper(event.wallpaper_url);
+      }
+      if (event.type === 'SET_OPACITY' && typeof event.opacity === 'number') {
+        // Clamp to [0, 1] — agents may pass arbitrary values.
+        const clamped = Math.max(0, Math.min(1, event.opacity));
+        setWallpaperDim(clamped);
       }
     });
   }, []);
@@ -338,6 +348,20 @@ const Shell: React.FC = () => {
         backgroundPosition: 'center',
       }}
     >
+      {/* Wallpaper dimmer scrim — sits above the wallpaper, below all windows + HUD.
+          pointer-events: none so it never blocks clicks. Smooth 300ms fade for
+          ambient-mode transitions. */}
+      <div
+        data-testid="wallpaper-dimmer"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: `rgba(0, 0, 0, ${wallpaperDim})`,
+          pointerEvents: 'none',
+          zIndex: 50,
+          transition: 'background 300ms ease',
+        }}
+      />
       {showVideo && pipPos && (
         <div
           ref={pipRef}
