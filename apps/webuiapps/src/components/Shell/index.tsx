@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useSyncExternalStore }
 import {
   MessageCircle,
   Twitter,
+  Flame,
   Music,
   BookOpen,
   Image,
@@ -14,11 +15,11 @@ import {
   Radio,
   Video,
   VideoOff,
-  Plus,
   X,
   Upload,
   FileImage,
   FileArchive,
+  GripHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import ChatWindow from '../ChatWindow';
@@ -55,6 +56,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Music,
   BookOpen,
   Image,
+  Flame,
   Circle,
   LayoutGrid,
   Mail,
@@ -63,6 +65,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Newspaper,
   Radio,
   MessageCircle,
+  X,
 };
 
 const DESKTOP_APPS = getDesktopApps().map((app) => ({
@@ -97,6 +100,7 @@ const Shell: React.FC = () => {
   const [extractResult, setExtractResult] = useState<ExtractResult | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [modGenerating, setModGenerating] = useState(false);
+  const [barPos, setBarPos] = useState<{ x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -283,33 +287,31 @@ const Shell: React.FC = () => {
     });
   }, []);
 
-  // Hidden file input ref for the "Add Wallpaper" affordance that replaces
-  // the EN/ZH toggle. User picks an image/video file → we read it as a
-  // data URL → setWallpaper applies it to the desktop background.
-  const wallpaperFileRef = useRef<HTMLInputElement | null>(null);
-  const handlePickWallpaperFile = useCallback(() => {
-    wallpaperFileRef.current?.click();
-  }, []);
-  const handleWallpaperFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setWallpaper(reader.result);
-          if (file.type.startsWith('video/')) setLiveWallpaper(true);
-        }
-      };
-      reader.readAsDataURL(file);
-      // Reset the input so picking the same file twice still fires onChange.
-      e.target.value = '';
-    },
-    [],
-  );
-
   useEffect(() => {
     seedMetaFiles();
+  }, []);
+
+  const handleBarDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = barRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const startPosX = rect.left;
+    const startPosY = rect.top;
+    setBarPos({ x: startPosX, y: startPosY });
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      setBarPos({
+        x: startPosX + ev.clientX - startX,
+        y: startPosY + ev.clientY - startY,
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   // Pause user action reporting while upload or mod generation is in progress
@@ -507,17 +509,22 @@ const Shell: React.FC = () => {
         </div>
       )}
 
-      {/* Floating add button */}
-      <button
-        className={`${styles.addBtn} ${chatOpen ? styles.chatOpen : ''}`}
-        onClick={() => setUploadOpen(true)}
-        title="Upload files"
-        data-testid="upload-toggle"
+      <div
+        ref={barRef}
+        className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}
+        style={
+          barPos
+            ? { position: 'fixed', left: barPos.x, top: barPos.y, transform: 'none', bottom: 'auto' }
+            : undefined
+        }
       >
-        <Plus size={20} />
-      </button>
-
-      <div className={`${styles.bottomBar} ${chatOpen ? styles.chatOpen : ''}`}>
+        <div
+          className={styles.barDragGrip}
+          onMouseDown={handleBarDragStart}
+          title="Drag to reposition"
+        >
+          <GripHorizontal size={14} />
+        </div>
         <button
           className={`${styles.barBtn} ${liveWallpaper ? styles.liveOn : styles.liveOff}`}
           onClick={() => setLiveWallpaper((prev) => !prev)}
@@ -527,24 +534,15 @@ const Shell: React.FC = () => {
           {liveWallpaper ? <Video size={16} /> : <VideoOff size={16} />}
         </button>
 
-        {/* Wallpaper file picker — replaces the EN/ZH toggle. Click to upload
-            an image or video to set as the desktop background. */}
+        {/* Upload button (same behavior as the old yellow +) */}
         <button
           className={styles.barBtn}
-          onClick={handlePickWallpaperFile}
-          title="Upload a wallpaper image or video"
-          data-testid="wallpaper-upload"
+          onClick={() => setUploadOpen(true)}
+          title="Upload files"
+          data-testid="upload-toggle"
         >
           <Upload size={16} />
         </button>
-        <input
-          ref={wallpaperFileRef}
-          type="file"
-          accept="image/*,video/*"
-          style={{ display: 'none' }}
-          onChange={handleWallpaperFileChange}
-          data-testid="wallpaper-upload-input"
-        />
 
         <button
           className={`${styles.barBtn} ${reportEnabled ? styles.reportOn : styles.reportOff}`}

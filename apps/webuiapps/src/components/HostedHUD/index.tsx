@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageCircle, Radio, Send } from 'lucide-react';
+import { MessageCircle, Radio, Send, GripHorizontal } from 'lucide-react';
 import { useKayleyChannel } from '@/hooks/useKayleyChannel';
 import { loadCharacterConfigSync } from '@/lib/characterManager';
 import { logger } from '@/lib/logger';
@@ -48,6 +48,8 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
   const [liveOpen, setLiveOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [pillPos, setPillPos] = useState<{ x: number; y: number } | null>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
 
   const kayley = useKayleyChannel();
   const kayleyRef = useRef(kayley);
@@ -95,6 +97,29 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
     },
     [handleSubmit, input],
   );
+
+  const handlePillDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = pillRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const startPosX = rect.left;
+    const startPosY = rect.top;
+    setPillPos({ x: startPosX, y: startPosY });
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      setPillPos({
+        x: startPosX + ev.clientX - startX,
+        y: startPosY + ev.clientY - startY,
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   // Log view for debug parity with ChatPanel.
   useEffect(() => {
@@ -144,36 +169,48 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
           he wanted a minimal centered-bottom UI with just the pill input.
           Stub prompt array kept above so it's easy to re-enable later. */}
 
-      {/* Centered-bottom yellow pill input */}
-      <div className={styles.pillWrap}>
-        <div className={styles.pill}>
-          <input
-            type="text"
-            className={styles.pillInput}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`${characterName} awaits your response...`}
-            disabled={sending}
-            data-testid="hosted-hud-input"
-          />
-          <button
-            className={styles.pillSend}
-            onClick={() => handleSubmit(input)}
-            disabled={!input.trim() || sending}
-            title="Send"
-            data-testid="hosted-hud-send"
-          >
-            <Send size={16} />
-          </button>
+      {/* Centered-bottom yellow pill input.
+          Only show when the Live panel is open — the Chat window has its own
+          input inside the panel, so the pill is exclusively a Live-mode control. */}
+      {liveOpen && (
+        <div
+          ref={pillRef}
+          className={styles.pillWrap}
+          style={
+            pillPos
+              ? { left: pillPos.x, top: pillPos.y, transform: 'none', bottom: 'auto' }
+              : undefined
+          }
+        >
+          <div className={styles.pillDragHandle} onMouseDown={handlePillDragStart} title="Drag to move">
+            <GripHorizontal size={14} />
+          </div>
+          <div className={styles.pill}>
+            <input
+              type="text"
+              className={styles.pillInput}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`${characterName} awaits your response...`}
+              disabled={sending}
+              data-testid="hosted-hud-input"
+            />
+            <button
+              className={styles.pillSend}
+              onClick={() => handleSubmit(input)}
+              disabled={!input.trim() || sending}
+              title="Send"
+              data-testid="hosted-hud-send"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+          {kayley.connected && (
+            <span className={styles.connectedDot} title="Connected to Kayley brain" />
+          )}
         </div>
-        {kayley.connected && (
-          <span
-            className={styles.connectedDot}
-            title="Connected to Kayley brain"
-          />
-        )}
-      </div>
+      )}
 
       {/* Avatar orb — bottom right, toggles ChatPanel */}
       <button

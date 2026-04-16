@@ -464,6 +464,7 @@ const ChatPanel: React.FC<{
   // Pending tool calls for current response (grouped per assistant turn)
   const pendingToolCallsRef = useRef<string[]>([]);
 
+  const messagesWrapRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -645,7 +646,9 @@ const ChatPanel: React.FC<{
   }, [modCollection, seedPrologue]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesWrapRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
 
   const addMessage = useCallback((msg: CharacterDisplayMessage) => {
@@ -1223,7 +1226,11 @@ const ChatPanel: React.FC<{
           </div>
           )}
 
-          <div className={styles.messages} data-testid="chat-messages">
+          <div
+            ref={messagesWrapRef}
+            className={styles.messages}
+            data-testid="chat-messages"
+          >
             {messages.length === 0 && (
               <div className={styles.emptyState}>
                 {kayley.connected

@@ -38,14 +38,15 @@ const MARGIN = 24;
 function getDefaultPos() {
   if (typeof window === 'undefined') return { x: 100, y: 100 };
   return {
-    x: Math.max(MARGIN, window.innerWidth - DEFAULT_W - MARGIN),
-    y: Math.max(MARGIN, window.innerHeight - DEFAULT_H - 120),
+    x: Math.max(MARGIN, Math.floor((window.innerWidth - DEFAULT_W) / 2)),
+    y: Math.max(MARGIN, Math.floor((window.innerHeight - DEFAULT_H) / 2)),
   };
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFocus }) => {
   const [pos, setPos] = useState(getDefaultPos);
   const [size, setSize] = useState({ width: DEFAULT_W, height: DEFAULT_H });
+  const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [preMaxState, setPreMaxState] = useState<{
     pos: { x: number; y: number };
@@ -65,6 +66,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
       }
       setMaximized(false);
     } else {
+      setMinimized(false);
       setPreMaxState({ pos, size });
       // Inset from viewport edges to keep react-rnd's bounds="window" happy
       // and leave room for the bottom dock/taskbar.
@@ -81,15 +83,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
 
   if (!visible) return null;
 
+  const effectiveSize = minimized
+    ? { width: size.width, height: 40 }
+    : size;
+
   return (
     <Rnd
       className={styles.wrapper}
-      size={size}
+      size={effectiveSize}
       position={pos}
       minWidth={MIN_W}
-      minHeight={MIN_H}
+      minHeight={minimized ? 40 : MIN_H}
       bounds="window"
       dragHandleClassName={styles.header}
+      enableResizing={!minimized}
       onDragStop={(_, d) => setPos({ x: d.x, y: d.y })}
       onResizeStop={(_, __, ref, ___, position) => {
         setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
@@ -107,8 +114,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
           <div className={styles.headerRight}>
             <button
               className={styles.iconBtn}
-              onClick={onClose}
-              title="Minimize"
+              onClick={() => setMinimized((v) => !v)}
+              title={minimized ? 'Restore' : 'Minimize'}
               data-testid="chat-window-min"
             >
               <Minus size={14} />
@@ -132,15 +139,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
           </div>
         </div>
 
-        <div className={styles.body}>
-          <ChatPanel
-            onClose={onClose}
-            visible={true}
-            zIndex={undefined}
-            onFocus={onFocus}
-            windowed
-          />
-        </div>
+        {!minimized && (
+          <div className={styles.body}>
+            <ChatPanel
+              onClose={onClose}
+              visible={true}
+              zIndex={undefined}
+              onFocus={onFocus}
+              windowed
+            />
+          </div>
+        )}
       </div>
     </Rnd>
   );

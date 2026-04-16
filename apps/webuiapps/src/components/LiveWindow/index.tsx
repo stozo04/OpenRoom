@@ -57,8 +57,8 @@ const STUB_VIEWER_COUNT = 180;
 function getDefaultPos() {
   if (typeof window === 'undefined') return { x: 50, y: 50 };
   return {
-    x: MARGIN,
-    y: Math.max(MARGIN, window.innerHeight - DEFAULT_H - 120),
+    x: Math.max(MARGIN, Math.floor((window.innerWidth - DEFAULT_W) / 2)),
+    y: Math.max(MARGIN, Math.floor((window.innerHeight - DEFAULT_H) / 2)),
   };
 }
 
