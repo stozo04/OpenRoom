@@ -530,7 +530,6 @@ const CyberNews: React.FC = () => {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [newsFilter, setNewsFilter] = useState<ArticleCategory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hnMode, setHnMode] = useState(false);
   const hnModeRef = useRef(false);
 
   // ============ Image Path Resolution ============
@@ -782,7 +781,7 @@ const CyberNews: React.FC = () => {
     const hnArticles = await fetchHackerNewsFrontPage();
     hnModeRef.current = true;
     setArticles(hnArticles);
-    setHnMode(true);
+    setIsLoading(false);
     // Keep the existing case-board experience as-is (seeded / persisted),
     // but make "news" show real Hacker News by default.
   }, []);

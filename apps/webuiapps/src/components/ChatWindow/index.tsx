@@ -66,6 +66,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ visible, onClose, zIndex, onFoc
       }
       setMaximized(false);
     } else {
+      setMinimized(false);
       setPreMaxState({ pos, size });
       // Inset from viewport edges to keep react-rnd's bounds="window" happy
       // and leave room for the bottom dock/taskbar.

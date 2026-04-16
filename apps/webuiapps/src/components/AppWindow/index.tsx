@@ -43,8 +43,15 @@ const AppWindow: React.FC<Props> = ({ win }) => {
   const toggleMax = useCallback(() => {
     if (!maximized) {
       setPreMaxState({ x: win.x, y: win.y, width: win.width, height: win.height });
-      moveWindow(win.appId, 0, 0);
-      resizeWindow(win.appId, window.innerWidth, window.innerHeight);
+      // Inset from edges to keep the bottom dock (wallpaper, upload, chat toggle) accessible.
+      const inset = 8;
+      const dockHeight = 80;
+      moveWindow(win.appId, inset, inset);
+      resizeWindow(
+        win.appId,
+        window.innerWidth - inset * 2,
+        window.innerHeight - inset * 2 - dockHeight,
+      );
       setMaximized(true);
     } else {
       if (preMaxState) {
