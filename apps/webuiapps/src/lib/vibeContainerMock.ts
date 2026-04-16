@@ -9,6 +9,17 @@ import i18next from 'i18next';
 import * as idb from './diskStorage';
 import { logger } from './logger';
 import { isReportUserActionsEnabled } from './action';
+import {
+  newGame as chessNewGame,
+  executeMove as chessExecuteMove,
+  legalMovesFor as chessLegalMovesFor,
+  legalMovesAlgebraic as chessLegalMovesAlgebraic,
+  boardToFen as chessBoardToFen,
+  suggestMove as chessSuggestMove,
+  fromNotation as chessFromNotation,
+  isValidState as chessIsValidState,
+  type GameState as ChessGameState,
+} from '../pages/Chess/engine';
 
 // ============ AppLifecycle Enum ============
 
@@ -137,6 +148,193 @@ function translateActionParams(action: {
  * For REFRESH / query-type actions, returns a data summary string; otherwise returns null.
  */
 
+// ============ Chess Per-App Action Handler ============
+// Chess state lives at this disk path — matches what createAppFileApi('chess') writes.
+const CHESS_STATE_PATH = '/apps/chess/data/state.json';
+const CHESS_APP_ID = 12;
+
+/**
+ * Read the current chess game state from disk. Returns null if no game exists
+ * or the file is invalid / missing.
+ */
+async function loadChessState(): Promise<ChessGameState | null> {
+  try {
+    const raw = await idb.getFile(CHESS_STATE_PATH);
+    if (!raw) return null;
+    return chessIsValidState(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a chess game state to disk (the same path the UI reads from).
+ */
+async function saveChessState(state: ChessGameState): Promise<void> {
+  await idb.putTextFilesByJSON({
+    files: [
+      {
+        path: '/apps/chess/data',
+        name: 'state.json',
+        content: JSON.stringify(state),
+      },
+    ],
+  });
+}
+
+/**
+ * Dispatch a Chess UI-notification action to the frontend if the window is
+ * open. If it's not open, this is a no-op — the headless handler has already
+ * persisted state.json, so whenever the window opens next it will load the
+ * latest game from disk. Fire-and-forget: the Agent's authoritative result
+ * comes from the headless engine, not the UI.
+ */
+function notifyChessUi(
+  actionType: 'AGENT_MOVE' | 'SYNC_STATE' | 'NEW_GAME',
+  extra: Record<string, string> = {},
+): void {
+  const wins = getWins();
+  const isOpen = wins.some((w) => w.appId === CHESS_APP_ID);
+  if (!isOpen) return;
+  const payload = {
+    app_id: CHESS_APP_ID,
+    action_type: actionType,
+    action_id: Date.now(),
+    timestamp_ms: Date.now(),
+    trigger_by: 2,
+    params: { filePath: CHESS_STATE_PATH, ...extra },
+  };
+  const content = JSON.stringify(payload);
+  agentMessageCallbacks.forEach((cb) => cb({ content }));
+}
+
+/**
+ * Per-app action dispatcher for Chess. All moves are validated by the engine
+ * before mutating state; invalid input returns a descriptive error string.
+ */
+async function handleChessAction(action: {
+  app_id: number;
+  action_type: string;
+  params?: Record<string, string>;
+}): Promise<string> {
+  const type = action.action_type;
+  const p = action.params ?? {};
+
+  if (type === 'START_GAME') {
+    const fresh = chessNewGame();
+    await saveChessState(fresh);
+    notifyChessUi('NEW_GAME', { gameId: fresh.gameId });
+    return JSON.stringify({ fen: chessBoardToFen(fresh) });
+  }
+
+  if (type === 'GET_BOARD') {
+    const state = await loadChessState();
+    if (!state) {
+      return 'error: no active game — call chess/START_GAME first';
+    }
+    return JSON.stringify({
+      fen: chessBoardToFen(state),
+      turn: state.currentTurn,
+      legal_moves: chessLegalMovesAlgebraic(state),
+    });
+  }
+
+  if (type === 'MAKE_MOVE') {
+    const state = await loadChessState();
+    if (!state) {
+      return 'error: no active game — call chess/START_GAME first';
+    }
+    if (
+      state.gameStatus === 'checkmate' ||
+      state.gameStatus === 'stalemate' ||
+      state.gameStatus === 'draw'
+    ) {
+      return `error: game is over (${state.gameStatus})`;
+    }
+
+    const fromSq = p.from;
+    const toSq = p.to;
+    if (!fromSq || !toSq) {
+      return 'error: missing required params "from" and "to" (e.g. from="e2", to="e4")';
+    }
+    const from = chessFromNotation(fromSq);
+    const to = chessFromNotation(toSq);
+    if (!from || !to) {
+      return `error: invalid square notation — from="${fromSq}", to="${toSq}" (expected e.g. "e2")`;
+    }
+
+    const piece = state.board[from[0]][from[1]];
+    if (!piece) {
+      return `error: no piece on ${fromSq}`;
+    }
+    if (piece.color !== state.currentTurn) {
+      return `error: it is ${state.currentTurn}'s turn — ${fromSq} is a ${piece.color} piece`;
+    }
+
+    const legal = chessLegalMovesFor(
+      state.board,
+      from[0],
+      from[1],
+      state.castlingRights,
+      state.enPassantTarget,
+    );
+    const isLegal = legal.some((t) => t[0] === to[0] && t[1] === to[1]);
+    if (!isLegal) {
+      return `error: illegal move ${fromSq}->${toSq}`;
+    }
+
+    const nextState = chessExecuteMove(state, from, to);
+    await saveChessState(nextState);
+    notifyChessUi('AGENT_MOVE', { from: fromSq, to: toSq });
+
+    const result: Record<string, unknown> = {
+      fen: chessBoardToFen(nextState),
+      last_move: `${fromSq}${toSq}`,
+      turn: nextState.currentTurn,
+    };
+    if (
+      nextState.gameStatus === 'checkmate' ||
+      nextState.gameStatus === 'stalemate' ||
+      nextState.gameStatus === 'draw'
+    ) {
+      result.game_over = nextState.gameStatus;
+    }
+    return JSON.stringify(result);
+  }
+
+  if (type === 'SURRENDER') {
+    const state = await loadChessState();
+    if (!state) {
+      return 'error: no active game — call chess/START_GAME first';
+    }
+    // By convention Kayley plays black, Steven plays white. SURRENDER is
+    // called by Kayley's brain — so Steven wins.
+    const surrendered: ChessGameState = {
+      ...state,
+      gameStatus: 'checkmate',
+      winner: 'w',
+      isAgentThinking: false,
+    };
+    await saveChessState(surrendered);
+    notifyChessUi('SYNC_STATE');
+    return JSON.stringify({ result: 'steven_won' });
+  }
+
+  if (type === 'HINT') {
+    const state = await loadChessState();
+    if (!state) {
+      return 'error: no active game — call chess/START_GAME first';
+    }
+    const hint = chessSuggestMove(state);
+    if (!hint) {
+      return 'error: no legal moves available';
+    }
+    return JSON.stringify({ suggested_move: hint.move, reason: hint.reason });
+  }
+
+  return `error: unknown chess action_type "${type}" — valid: START_GAME, MAKE_MOVE, GET_BOARD, SURRENDER, HINT`;
+}
+
 /**
  * Called by ChatPanel: dispatch an LLM-returned Action to the App.
  * Returns a Promise that resolves when the App handler finishes processing and returns a result.
@@ -183,6 +381,14 @@ export async function dispatchAgentAction(action: {
       return 'success';
     }
     return 'error: unknown OS action';
+  }
+
+  // Chess actions (app_id=12) are handled directly — we own an authoritative
+  // headless chess engine in the dispatcher so Kayley can play even if the
+  // Chess window isn't open. state.json stays the source of truth so when
+  // the UI is open, a subsequent SYNC_STATE notification refreshes it.
+  if (action.app_id === 12) {
+    return handleChessAction(action);
   }
 
   // Translate Action params
