@@ -1,0 +1,591 @@
+// MysteryApp — noir detective theme
+// Dark ground, amber accents, serif headers, boxy rules
+
+$bg-1: #0f0d0a;
+$bg-2: #17130d;
+$bg-3: #1f1913;
+$amber: #d4a574;
+$amber-dim: #8a6a47;
+$parchment: #e8dcc4;
+$blood: #b5343b;
+$muted: rgba(232, 220, 196, 0.55);
+$faint: rgba(232, 220, 196, 0.2);
+
+.mystery {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 20% 10%, #1a140d 0%, #0a0807 70%);
+  color: $parchment;
+  font-family: 'Inter', 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid $faint;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  flex: 1;
+  min-width: 0;
+}
+
+.caseLabel {
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: $amber-dim;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: $amber;
+  letter-spacing: 0.02em;
+}
+
+.tagline {
+  font-size: 13px;
+  color: $muted;
+  margin: 0 0 6px;
+  font-style: italic;
+}
+
+.victim {
+  font-size: 12px;
+  color: $parchment;
+  opacity: 0.75;
+}
+
+.headerRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: $muted;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.errorText {
+  font-size: 11px;
+  color: $blood;
+  max-width: 240px;
+  text-align: right;
+}
+
+.accuseButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: $blood;
+  color: $parchment;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  padding: 8px 14px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    background: lighten($blood, 5%);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.3fr) minmax(240px, 0.9fr);
+  gap: 0;
+  min-height: 0;
+}
+
+.leftCol,
+.chatPanel,
+.evidenceCol {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.leftCol {
+  border-right: 1px solid $faint;
+  overflow-y: auto;
+  padding: 14px;
+  gap: 16px;
+}
+
+.chatPanel {
+  border-right: 1px solid $faint;
+}
+
+.evidenceCol {
+  padding: 14px 14px 18px;
+}
+
+.panel {
+  background: rgba(26, 20, 13, 0.5);
+  border: 1px solid $faint;
+  border-radius: 3px;
+  padding: 12px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
+  color: $amber;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid $faint;
+}
+
+.suspectGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.suspectCard {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid $faint;
+  border-radius: 3px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 4px 10px;
+  align-items: start;
+}
+
+.headshot {
+  grid-row: 1 / 4;
+  width: 48px;
+  height: 60px;
+  background: linear-gradient(135deg, $bg-3 0%, $bg-2 100%);
+  border: 1px solid $amber-dim;
+  color: $amber;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.05em;
+}
+
+.suspectName {
+  font-weight: 600;
+  color: $parchment;
+  font-size: 13px;
+}
+
+.suspectRole {
+  font-size: 11px;
+  color: $amber-dim;
+  font-style: italic;
+}
+
+.suspectBlurb {
+  grid-column: 1 / 3;
+  font-size: 11px;
+  color: $muted;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.demeanorChip {
+  grid-column: 1 / 3;
+  justify-self: start;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 8px;
+  border: 1px solid $blood;
+  color: $blood;
+  border-radius: 2px;
+  margin-top: 4px;
+}
+
+.suspectActions {
+  grid-column: 1 / 3;
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+
+  button {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: transparent;
+    border: 1px solid $amber-dim;
+    color: $amber;
+    padding: 5px 8px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 120ms ease;
+
+    &:hover:not(:disabled) {
+      background: rgba(212, 165, 116, 0.15);
+      border-color: $amber;
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.locationList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locationBtn {
+  width: 100%;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid $faint;
+  border-left: 3px solid $amber-dim;
+  color: $parchment;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    border-left-color: $amber;
+    background: rgba(212, 165, 116, 0.08);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.locationName {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.locationHint {
+  font-size: 11px;
+  color: $muted;
+  margin-top: 3px;
+  font-style: italic;
+}
+
+.chatScroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.chat_narrative {
+  background: rgba(26, 20, 13, 0.6);
+  border-left: 3px solid $amber;
+  padding: 10px 12px;
+  color: $parchment;
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.chat_action {
+  color: $amber;
+  font-weight: 500;
+  padding-left: 6px;
+  border-left: 2px solid $amber-dim;
+  &::before {
+    content: '▸ ';
+  }
+}
+
+.chat_system {
+  color: $muted;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 4px 8px;
+}
+
+.chat_error {
+  color: $blood;
+  font-size: 12px;
+  border-left: 2px solid $blood;
+  padding-left: 8px;
+}
+
+.emptyEvidence {
+  font-size: 12px;
+  color: $muted;
+  font-style: italic;
+  padding: 12px;
+  border: 1px dashed $faint;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.evidenceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.evidenceItem {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid $faint;
+  padding: 10px;
+  border-radius: 3px;
+}
+
+.evidenceId {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: $amber-dim;
+  margin-bottom: 4px;
+}
+
+.evidenceDesc {
+  font-size: 12px;
+  color: $parchment;
+  line-height: 1.45;
+}
+
+.evidenceSource {
+  font-size: 10px;
+  color: $muted;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.evidenceCollect {
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid $amber-dim;
+  color: $amber;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border-radius: 2px;
+
+  &:hover:not(:disabled) {
+    background: rgba(212, 165, 116, 0.12);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+// ========== Modal ==========
+.modalOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background: $bg-2;
+  border: 1px solid $amber-dim;
+  border-radius: 4px;
+  padding: 20px 24px;
+  width: min(420px, calc(100% - 48px));
+  max-height: calc(100% - 48px);
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  color: $parchment;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  h2 {
+    font-family: 'Playfair Display', Georgia, serif;
+    color: $amber;
+    margin: 0 0 4px;
+    font-size: 20px;
+    letter-spacing: 0.04em;
+  }
+}
+
+.modalClose {
+  background: transparent;
+  border: 0;
+  color: $muted;
+  cursor: pointer;
+  padding: 4px;
+
+  &:hover {
+    color: $parchment;
+  }
+}
+
+.modalSubtitle {
+  font-size: 12px;
+  color: $muted;
+  font-style: italic;
+  margin: 0 0 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+
+  span {
+    font-size: 11px;
+    color: $amber-dim;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  input,
+  select,
+  textarea {
+    background: $bg-1;
+    border: 1px solid $faint;
+    color: $parchment;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    border-radius: 2px;
+
+    &:focus {
+      outline: none;
+      border-color: $amber;
+    }
+  }
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+
+  button {
+    background: transparent;
+    border: 1px solid $faint;
+    color: $parchment;
+    padding: 8px 14px;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 13px;
+
+    &:hover:not(:disabled) {
+      border-color: $amber;
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.modalPrimary {
+  background: $blood !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  font-weight: 600 !important;
+}
+
+.verdictWin {
+  color: #22c55e !important;
+}
+
+.verdictLose {
+  color: $blood !important;
+}
+
+.reveal {
+  font-size: 13px;
+  color: $parchment;
+  line-height: 1.55;
+  font-style: italic;
+  border-left: 3px solid $amber;
+  padding-left: 12px;
+  margin: 12px 0;
+}
+
+.solutionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: $muted;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid $faint;
+  padding: 10px 12px;
+  border-radius: 3px;
+
+  strong {
+    color: $amber;
+    margin-right: 6px;
+  }
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: $blood;
+  margin-top: 10px;
+}

@@ -168,6 +168,16 @@ const APP_STATIC_REGISTRY: AppStaticDef[] = [
     color: '#ff7aa2',
     defaultSize: { width: 880, height: 600 },
   },
+  {
+    appId: 17,
+    appName: 'mystery',
+    route: '/mystery',
+    displayName: 'Mystery',
+    sourceDir: 'MysteryApp',
+    icon: 'Search',
+    color: '#d4a574',
+    defaultSize: { width: 960, height: 680 },
+  },
 ];
 
 // OS actions are built-in system actions, not from meta.yaml
