@@ -10,6 +10,7 @@ import {
 import './i18n';
 import { ArrowLeft, Search, Youtube } from 'lucide-react';
 import type { YouTubeSearchResult, YTPlayer } from './types';
+import { getYouTubeApiKey, searchYouTubeDataApi } from './youtubeApi';
 import {
   APP_ID,
   ActionTypes,
@@ -29,7 +30,7 @@ import styles from './index.module.scss';
 // always observable end-to-end. Kayley cares more about the action
 // dispatching than perfect search fidelity.
 
-type SearchBackend = 'youtube-search-api' | 'stub';
+type SearchBackend = 'youtube-data-api' | 'stub';
 
 /**
  * Stub results used when the real scraper fails in the browser. Five fixed
@@ -73,55 +74,18 @@ const STUB_RESULTS: YouTubeSearchResult[] = [
   },
 ];
 
-interface RawScrapeItem {
-  id?: string;
-  title?: string;
-  length?: { simpleText?: string };
-  thumbnail?: { thumbnails?: Array<{ url?: string }> };
-  channelTitle?: string;
-  type?: string;
-}
-
 async function searchYouTube(
   query: string,
   maxResults: number,
 ): Promise<{ results: YouTubeSearchResult[]; backend: SearchBackend }> {
   const cap = Math.min(Math.max(1, maxResults), MAX_MAX_RESULTS);
 
-  // Try the real scraper. Dynamic import so any top-level failure is
-  // contained and we can fall back to stubs without blowing up the App.
   try {
-    const mod = (await import('youtube-search-api')) as {
-      GetListByKeyword?: (
-        keyword: string,
-        withPlaylist?: boolean,
-        limit?: number,
-      ) => Promise<{ items?: RawScrapeItem[] }>;
-    };
-
-    const GetListByKeyword = mod.GetListByKeyword;
-    if (typeof GetListByKeyword !== 'function') {
-      throw new Error('youtube-search-api: GetListByKeyword not available');
+    // Prefer official API when a key is present; fall through to stub on any failure.
+    if (getYouTubeApiKey()) {
+      return await searchYouTubeDataApi(query, cap);
     }
-
-    const raw = await GetListByKeyword(query, false, cap);
-    const items = (raw?.items ?? []).filter((it) => it?.type === 'video' && it?.id);
-
-    const results: YouTubeSearchResult[] = items.slice(0, cap).map((it) => ({
-      video_id: it.id as string,
-      title: it.title ?? '(untitled)',
-      channel: it.channelTitle ?? '',
-      thumbnail_url:
-        it.thumbnail?.thumbnails?.[it.thumbnail.thumbnails.length - 1]?.url ??
-        `https://i.ytimg.com/vi/${it.id}/hqdefault.jpg`,
-      duration: it.length?.simpleText,
-    }));
-
-    if (results.length > 0) {
-      return { results, backend: 'youtube-search-api' };
-    }
-    // Empty result — fall through to stub so the UI shows something.
-    throw new Error('youtube-search-api returned no video items');
+    throw new Error('Missing VITE_YOUTUBE_API_KEY');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[YouTubeApp] Real search failed, using stub:', message);
@@ -193,6 +157,7 @@ const YouTubeApp: React.FC = () => {
   const [results, setResults] = useState<YouTubeSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastBackend, setLastBackend] = useState<SearchBackend | null>(null);
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState('');
   const [queue, setQueue] = useState<string[]>([]);
@@ -218,6 +183,7 @@ const YouTubeApp: React.FC = () => {
       setLastQuery(q);
       try {
         const { results: items, backend } = await searchYouTube(q, maxResults);
+        setLastBackend(backend);
         setResults(items);
         setIsSearching(false);
         return {
@@ -584,12 +550,18 @@ const YouTubeApp: React.FC = () => {
           <Search size={18} className={styles.searchIcon} />
           <input
             className={styles.searchInput}
+            data-testid="youtube-search-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('header.placeholder')}
             type="text"
           />
-          <button className={styles.searchBtn} type="submit" disabled={!query.trim()}>
+          <button
+            className={styles.searchBtn}
+            data-testid="youtube-search-submit"
+            type="submit"
+            disabled={!query.trim()}
+          >
             {t('header.search')}
           </button>
         </form>
@@ -620,14 +592,21 @@ const YouTubeApp: React.FC = () => {
           </div>
         ) : (
           <>
+            {lastBackend === 'stub' ? (
+              <div className={styles.statusMessage}>
+                Using stub results. Set <code>VITE_YOUTUBE_API_KEY</code> in{' '}
+                <code>apps/webuiapps/.env.local</code> and restart the dev server.
+              </div>
+            ) : null}
             <div className={styles.resultsMeta}>
               {t('results.count', { count: results.length, query: lastQuery })}
             </div>
-            <div className={styles.grid}>
+            <div className={styles.grid} data-testid="youtube-results">
               {results.map((r) => (
                 <button
                   key={r.video_id}
                   className={styles.card}
+                  data-testid={`youtube-result-${r.video_id}`}
                   onClick={() => handleCardClick(r.video_id)}
                   type="button"
                 >

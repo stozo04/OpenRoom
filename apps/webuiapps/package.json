@@ -11,9 +11,9 @@
     "build": "cross-env NODE_ENV=production vite build",
     "build:analyze": "cross-env NODE_ENV=production ANALYZE=analyze vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test": "..\\\\..\\\\node_modules\\\\.bin\\\\vitest.cmd run",
+    "test:watch": "..\\\\..\\\\node_modules\\\\.bin\\\\vitest.cmd",
+    "test:coverage": "..\\\\..\\\\node_modules\\\\.bin\\\\vitest.cmd run --coverage"
   },
   "dependencies": {
     "framer-motion": "^12.34.0",
