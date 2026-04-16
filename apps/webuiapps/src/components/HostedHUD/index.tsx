@@ -144,36 +144,37 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
           he wanted a minimal centered-bottom UI with just the pill input.
           Stub prompt array kept above so it's easy to re-enable later. */}
 
-      {/* Centered-bottom yellow pill input */}
-      <div className={styles.pillWrap}>
-        <div className={styles.pill}>
-          <input
-            type="text"
-            className={styles.pillInput}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`${characterName} awaits your response...`}
-            disabled={sending}
-            data-testid="hosted-hud-input"
-          />
-          <button
-            className={styles.pillSend}
-            onClick={() => handleSubmit(input)}
-            disabled={!input.trim() || sending}
-            title="Send"
-            data-testid="hosted-hud-send"
-          >
-            <Send size={16} />
-          </button>
+      {/* Centered-bottom yellow pill input.
+          Only show when the chat panel/window is visible; otherwise the desktop
+          should stay clean and there's nowhere to "insert" the message. */}
+      {chatOpen && (
+        <div className={styles.pillWrap}>
+          <div className={styles.pill}>
+            <input
+              type="text"
+              className={styles.pillInput}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`${characterName} awaits your response...`}
+              disabled={sending}
+              data-testid="hosted-hud-input"
+            />
+            <button
+              className={styles.pillSend}
+              onClick={() => handleSubmit(input)}
+              disabled={!input.trim() || sending}
+              title="Send"
+              data-testid="hosted-hud-send"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+          {kayley.connected && (
+            <span className={styles.connectedDot} title="Connected to Kayley brain" />
+          )}
         </div>
-        {kayley.connected && (
-          <span
-            className={styles.connectedDot}
-            title="Connected to Kayley brain"
-          />
-        )}
-      </div>
+      )}
 
       {/* Avatar orb — bottom right, toggles ChatPanel */}
       <button
