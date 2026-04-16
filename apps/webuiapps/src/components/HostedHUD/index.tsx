@@ -145,9 +145,9 @@ const HostedHUD: React.FC<HostedHUDProps> = ({ chatOpen, onToggleChat }) => {
           Stub prompt array kept above so it's easy to re-enable later. */}
 
       {/* Centered-bottom yellow pill input.
-          Only show when the chat panel/window is visible; otherwise the desktop
-          should stay clean and there's nowhere to "insert" the message. */}
-      {chatOpen && (
+          Only show when the Live panel is open — the Chat window has its own
+          input inside the panel, so the pill is exclusively a Live-mode control. */}
+      {liveOpen && (
         <div className={styles.pillWrap}>
           <div className={styles.pill}>
             <input
