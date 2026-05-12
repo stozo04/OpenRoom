@@ -82,8 +82,13 @@ const MysteryApp: React.FC = () => {
   const [gameOver, setGameOver] = useState<MysteryActionResponse['game_over'] | null>(null);
   const [accuseOpen, setAccuseOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [collected, setCollected] = useState<Map<string, string>>(new Map());
+  const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set());
+  const [interrogating, setInterrogating] = useState<SuspectId | null>(null);
+  const [questionText, setQuestionText] = useState('');
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const questionInputRef = useRef<HTMLInputElement>(null);
   const { status, lastError, sendAction } = useGMSocket();
 
   // Auto-scroll chat
@@ -94,7 +99,7 @@ const MysteryApp: React.FC = () => {
 
   // ===== Core dispatch =====
   const dispatchMysteryAction = useCallback(
-    async (action_type: string, params: Record<string, string>, label: string) => {
+    async (action_type: string, params: Record<string, string>, label: string): Promise<{ status: string; narrative?: string }> => {
       setChat((prev) =>
         appendChat(prev, { kind: 'action', text: label }),
       );
@@ -105,7 +110,7 @@ const MysteryApp: React.FC = () => {
           setChat((prev) =>
             appendChat(prev, { kind: 'error', text: 'GM: ' + response.error }),
           );
-          return 'error: ' + response.error;
+          return { status: 'error: ' + response.error };
         }
         if (response.narrative) {
           setChat((prev) =>
@@ -121,14 +126,14 @@ const MysteryApp: React.FC = () => {
         if (response.game_over) {
           setGameOver(response.game_over);
         }
-        return 'success';
+        return { status: 'success', narrative: response.narrative };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn('[MysteryApp] action failed:', action_type, msg);
         setChat((prev) =>
           appendChat(prev, { kind: 'error', text: 'Action failed: ' + msg }),
         );
-        return 'error: ' + msg;
+        return { status: 'error: ' + msg };
       } finally {
         setBusy(false);
       }
@@ -140,15 +145,33 @@ const MysteryApp: React.FC = () => {
   const handleInterrogate = useCallback(
     (suspect: SuspectId) => {
       const name = SUSPECTS.find((s) => s.id === suspect)?.name ?? suspect;
+      // Fire the initial scene-setting interrogation (no question yet)
       void dispatchMysteryAction(
         ACTION_INTERROGATE,
         { suspect_id: suspect },
         'You press ' + name + ' for answers.',
-      );
+      ).then(() => {
+        // After the scene is set, show the question bar for follow-ups
+        setInterrogating(suspect);
+        setQuestionText('');
+        setTimeout(() => questionInputRef.current?.focus(), 50);
+      });
       reportAction(APP_ID, ACTION_INTERROGATE, { suspect_id: suspect });
     },
     [dispatchMysteryAction],
   );
+
+  const handleSubmitQuestion = useCallback(() => {
+    if (!interrogating || !questionText.trim()) return;
+    const name = SUSPECTS.find((s) => s.id === interrogating)?.name ?? interrogating;
+    void dispatchMysteryAction(
+      ACTION_INTERROGATE,
+      { suspect_id: interrogating, question: questionText.trim() },
+      'You ask ' + name + ': "' + questionText.trim() + '"',
+    );
+    reportAction(APP_ID, ACTION_INTERROGATE, { suspect_id: interrogating, question: questionText.trim() });
+    setQuestionText('');
+  }, [interrogating, questionText, dispatchMysteryAction]);
 
   const handleExamine = useCallback(
     (loc: LocationId) => {
@@ -182,7 +205,9 @@ const MysteryApp: React.FC = () => {
         ACTION_COLLECT_EVIDENCE,
         { evidence_id },
         'You bag the evidence: ' + evidence_id,
-      );
+      ).then((result) => {
+        setCollected((prev) => new Map([...prev, [evidence_id, result.narrative ?? '']]));
+      });
       reportAction(APP_ID, ACTION_COLLECT_EVIDENCE, { evidence_id });
     },
     [dispatchMysteryAction],
@@ -389,6 +414,47 @@ const MysteryApp: React.FC = () => {
             ))}
             {busy && <div className={styles.chat_system}>GM is thinking…</div>}
           </div>
+          {interrogating && (
+            <div className={styles.questionBar}>
+              <span className={styles.questionLabel}>
+                Ask {SUSPECTS.find((s) => s.id === interrogating)?.name ?? interrogating}:
+              </span>
+              <input
+                ref={questionInputRef}
+                type="text"
+                className={styles.questionInput}
+                placeholder="Type your question…"
+                value={questionText}
+                onChange={(e) => setQuestionText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmitQuestion();
+                  }
+                  if (e.key === 'Escape') {
+                    setInterrogating(null);
+                  }
+                }}
+                disabled={busy || !!gameOver || status !== 'open'}
+              />
+              <button
+                type="button"
+                className={styles.questionSend}
+                disabled={busy || !!gameOver || status !== 'open' || !questionText.trim()}
+                onClick={handleSubmitQuestion}
+              >
+                Ask
+              </button>
+              <button
+                type="button"
+                className={styles.questionClose}
+                onClick={() => setInterrogating(null)}
+                aria-label="Cancel interrogation"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Right column: evidence board */}
@@ -408,14 +474,35 @@ const MysteryApp: React.FC = () => {
                   <div className={styles.evidenceId}>{ev.id}</div>
                   <div className={styles.evidenceDesc}>{ev.description}</div>
                   {ev.source && <div className={styles.evidenceSource}>Source: {ev.source}</div>}
-                  <button
-                    type="button"
-                    className={styles.evidenceCollect}
-                    disabled={busy || !!gameOver || status !== 'open'}
-                    onClick={() => handleCollect(ev.id)}
-                  >
-                    Collect
-                  </button>
+                  {collected.has(ev.id) ? (
+                    <button
+                      type="button"
+                      className={styles.evidenceCollected}
+                      onClick={() =>
+                        setExpandedEvidence((prev) => {
+                          const next = new Set(prev);
+                          next.has(ev.id) ? next.delete(ev.id) : next.add(ev.id);
+                          return next;
+                        })
+                      }
+                    >
+                      {expandedEvidence.has(ev.id) ? 'Hide Notes' : 'Read Notes'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.evidenceCollect}
+                      disabled={busy || !!gameOver || status !== 'open'}
+                      onClick={() => handleCollect(ev.id)}
+                    >
+                      Collect
+                    </button>
+                  )}
+                  {expandedEvidence.has(ev.id) && collected.has(ev.id) && (
+                    <div className={styles.evidenceNotes}>
+                      {collected.get(ev.id)}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -529,6 +616,10 @@ const GameOverModal: React.FC<{
   onClose: () => void;
 }> = ({ gameOver, onClose }) => {
   const verdictClass = gameOver.correct ? styles.verdictWin : styles.verdictLose;
+  const solution = gameOver.solution;
+  const killerName = solution?.killer_id
+    ? (SUSPECTS.find((s) => s.id === solution.killer_id)?.name ?? solution.killer_id)
+    : '(GM did not return a solution)';
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -543,18 +634,16 @@ const GameOverModal: React.FC<{
         <p className={styles.reveal}>{gameOver.reveal}</p>
         <div className={styles.solutionBlock}>
           <div>
-            <strong>Killer:</strong>{' '}
-            {SUSPECTS.find((s) => s.id === gameOver.solution.killer_id)?.name ??
-              gameOver.solution.killer_id}
+            <strong>Killer:</strong> {killerName}
           </div>
           <div>
-            <strong>Motive:</strong> {gameOver.solution.motive}
+            <strong>Motive:</strong> {solution?.motive ?? '—'}
           </div>
           <div>
-            <strong>Weapon:</strong> {gameOver.solution.weapon}
+            <strong>Weapon:</strong> {solution?.weapon ?? '—'}
           </div>
           <div>
-            <strong>Method:</strong> {gameOver.solution.method}
+            <strong>Method:</strong> {solution?.method ?? '—'}
           </div>
         </div>
         {!gameOver.correct && (

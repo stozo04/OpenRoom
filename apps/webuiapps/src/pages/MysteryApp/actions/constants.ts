@@ -23,11 +23,12 @@ export const MYSTERY_ACTIONS = [
 
 export type MysteryActionType = (typeof MYSTERY_ACTIONS)[number];
 
-/** GM WebSocket endpoint (subprocess lives on 5182 in local dev). */
-export const GM_WS_URL = 'ws://localhost:5182';
+/** GM WebSocket endpoint (subprocess lives on 5185 in local dev — moved off 5182 on 2026-05-05 to coexist with dashboard API). */
+export const GM_WS_URL = 'ws://localhost:5185';
 
 /** How long we wait before retrying a dropped WebSocket connection. */
 export const GM_RECONNECT_MS = 2500;
 
-/** Response timeout — if the GM takes longer than this, surface an error. */
-export const GM_RESPONSE_TIMEOUT_MS = 30000;
+/** Response timeout — Haiku interrogations can take 30-50s; keep this above the
+ *  GM subprocess's own 60s claude timeout so the frontend never races ahead. */
+export const GM_RESPONSE_TIMEOUT_MS = 65000;

@@ -359,6 +359,84 @@ $faint: rgba(232, 220, 196, 0.2);
   padding-left: 8px;
 }
 
+// ========== Interrogation question bar ==========
+.questionBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid $amber-dim;
+  background: rgba(26, 20, 13, 0.8);
+  flex-shrink: 0;
+}
+
+.questionLabel {
+  font-size: 11px;
+  color: $amber;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.questionInput {
+  flex: 1;
+  background: $bg-1;
+  border: 1px solid $faint;
+  color: $parchment;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: 2px;
+
+  &:focus {
+    outline: none;
+    border-color: $amber;
+  }
+
+  &::placeholder {
+    color: $muted;
+    font-style: italic;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+  }
+}
+
+.questionSend {
+  background: $amber-dim;
+  color: $parchment;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    background: $amber;
+    color: $bg-1;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.questionClose {
+  background: transparent;
+  border: 0;
+  color: $muted;
+  cursor: pointer;
+  padding: 4px;
+
+  &:hover {
+    color: $parchment;
+  }
+}
+
 .emptyEvidence {
   font-size: 12px;
   color: $muted;
@@ -426,6 +504,34 @@ $faint: rgba(232, 220, 196, 0.2);
     opacity: 0.4;
     cursor: not-allowed;
   }
+}
+
+.evidenceCollected {
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(34, 197, 94, 0.08);
+  }
+}
+
+.evidenceNotes {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 2px solid $amber-dim;
+  font-size: 11px;
+  color: $parchment;
+  line-height: 1.5;
+  font-style: italic;
+  white-space: pre-wrap;
 }
 
 // ========== Modal ==========
