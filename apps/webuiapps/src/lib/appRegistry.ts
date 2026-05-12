@@ -178,6 +178,16 @@ const APP_STATIC_REGISTRY: AppStaticDef[] = [
     color: '#d4a574',
     defaultSize: { width: 960, height: 680 },
   },
+  {
+    appId: 18,
+    appName: 'light',
+    route: '/light',
+    displayName: 'Light',
+    sourceDir: 'Light',
+    icon: 'Lightbulb',
+    color: '#fbbf24',
+    defaultSize: { width: 320, height: 520 },
+  },
 ];
 
 // OS actions are built-in system actions, not from meta.yaml

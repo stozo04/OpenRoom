@@ -78,6 +78,35 @@ export function onOSEvent(callback: OSEventCallback): () => void {
   return () => osEventCallbacks.delete(callback);
 }
 
+// Wallpaper-dimmer state retained at module scope so newly-mounted apps
+// (notably the Light app) can render with the correct initial value
+// instead of starting at 0 and snapping to the real value on the first
+// SET_OPACITY event. Updated by both the OS SET_OPACITY action handler
+// (agent-driven) and setOpacityFromUI (user-driven via Light slider).
+let currentWallpaperOpacity = 0;
+
+/**
+ * Returns the latest known wallpaper-dimmer opacity in [0, 1]. 0 = bright,
+ * 1 = pitch black. Used by the Light app to show the correct slider
+ * position on mount.
+ */
+export function getCurrentWallpaperOpacity(): number {
+  return currentWallpaperOpacity;
+}
+
+/**
+ * Dispatch a SET_OPACITY action from a user-driven UI surface (e.g. the
+ * Light app's slider drag). Updates the retained state, fires the OS event
+ * to redraw the scrim, and reports the user action so the agent sees that
+ * the user dimmed the lights manually.
+ */
+export function setOpacityFromUI(value: number): void {
+  const clamped = Math.max(0, Math.min(1, value));
+  currentWallpaperOpacity = clamped;
+  osEventCallbacks.forEach((cb) => cb({ type: 'SET_OPACITY', opacity: clamped }));
+  reportUserOsAction('SET_OPACITY', { opacity: String(clamped) });
+}
+
 // ============ OS Window Manager ============
 
 import { openWindow, closeWindow, getWindows as getWins } from './windowManager';
@@ -372,6 +401,7 @@ export async function dispatchAgentAction(action: {
         return 'error: SET_OPACITY requires numeric opacity param in [0.0, 1.0]';
       }
       const clamped = Math.max(0, Math.min(1, parsed));
+      currentWallpaperOpacity = clamped;
       osEventCallbacks.forEach((cb) => cb({ type: 'SET_OPACITY', opacity: clamped }));
       return 'success';
     }
