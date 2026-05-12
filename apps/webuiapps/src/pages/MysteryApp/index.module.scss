@@ -353,6 +353,20 @@ $faint: rgba(232, 220, 196, 0.2);
   }
 }
 
+// Once a Dossier or Interrogate has been triggered for a suspect, the
+// corresponding button flips to the green "done" treatment — matches the
+// EvidenceBoard "Read Notes" green pattern so the player can see at a glance
+// who they've already worked.
+.suspectActions button.suspectActionDone {
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+
+  &:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.7);
+  }
+}
+
 .locationList {
   list-style: none;
   margin: 0;
@@ -383,9 +397,37 @@ $faint: rgba(232, 220, 196, 0.2);
   }
 }
 
+// Visited locations get the green left-border + faint green wash so the
+// player can scan the location panel and see at a glance which rooms have
+// been examined this session.
+.locationBtn.locationVisited {
+  border-left-color: #22c55e;
+  background: rgba(34, 197, 94, 0.05);
+
+  &:hover:not(:disabled) {
+    border-left-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+  }
+}
+
 .locationName {
   font-weight: 600;
   font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.locationVisitedBadge {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  padding: 1px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
 }
 
 .locationHint {

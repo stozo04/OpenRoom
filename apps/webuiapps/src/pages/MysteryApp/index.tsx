@@ -21,6 +21,7 @@ import {
   type CharacterAppAction,
 } from '@/lib';
 import { sendKayleyWsPayload } from '@/lib/kayleyWsBridge';
+import { mysteryLog } from '@/lib/mysteryLogger';
 import styles from './index.module.scss';
 import {
   ACTION_COLLECT_EVIDENCE,
@@ -65,13 +66,28 @@ function mergeDemeanor(
   prev: Partial<Record<SuspectId, SuspectDemeanor>>,
   incoming: Partial<Record<SuspectId, SuspectDemeanor>> | undefined,
 ): Partial<Record<SuspectId, SuspectDemeanor>> {
-  if (!incoming) return prev;
+  // Defensive guard: gm-server normalizes string demeanor → object before
+  // sending, but a string can still slip through on edge actions where the
+  // normalizer can't infer the subject. Spreading a raw string into an object
+  // expands it character-by-character (e.g. "evasive" → {0:"e",1:"v",...}),
+  // which corrupts the demeanor state. Origin: 2026-05-12 playtest bug.
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return prev;
   return { ...prev, ...incoming };
 }
 
-function serializeDispatchResult(r: { status: string; narrative?: string }): string {
+function serializeDispatchResult(r: {
+  status: string;
+  narrative?: string;
+  evidence_unlocked?: EvidenceItem[];
+}): string {
   if (r.status.startsWith('error:')) return r.status;
-  return JSON.stringify({ status: r.status, narrative: r.narrative ?? '' });
+  const evidence_available =
+    r.evidence_unlocked?.map((e) => ({ id: e.id, label: e.label })) ?? [];
+  return JSON.stringify({
+    status: r.status,
+    narrative: r.narrative ?? '',
+    ...(evidence_available.length > 0 && { evidence_available }),
+  });
 }
 
 const MysteryApp: React.FC = () => {
@@ -90,6 +106,9 @@ const MysteryApp: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [collected, setCollected] = useState<Map<string, string>>(new Map());
   const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set());
+  const [dossiersOpened, setDossiersOpened] = useState<Set<SuspectId>>(new Set());
+  const [suspectsInterrogated, setSuspectsInterrogated] = useState<Set<SuspectId>>(new Set());
+  const [locationsVisited, setLocationsVisited] = useState<Set<string>>(new Set());
   const [interrogating, setInterrogating] = useState<SuspectId | null>(null);
   const [questionText, setQuestionText] = useState('');
 
@@ -167,7 +186,7 @@ const MysteryApp: React.FC = () => {
       action_type: string,
       params: Record<string, string>,
       label: string,
-    ): Promise<{ status: string; narrative?: string }> => {
+    ): Promise<{ status: string; narrative?: string; evidence_unlocked?: EvidenceItem[] }> => {
       setChat((prev) => appendChat(prev, { kind: 'action', text: label }));
       setBusy(true);
       try {
@@ -188,7 +207,27 @@ const MysteryApp: React.FC = () => {
         if (response.game_over) {
           setGameOver(response.game_over);
         }
-        return { status: 'success', narrative: response.narrative };
+
+        // Real-time push to Kayley brain so we can chat about the human's
+        // moves DURING their turn (not just at finish-turn boundary). Gated
+        // on snapshotRef so the agent path doesn't echo its own actions back
+        // to itself. Origin: 2026-05-12 playtest — Steven wanted live
+        // commentary on his Dossier/Interrogate/Examine reveals.
+        if (snapshotRef.current.turnOwner === 'human') {
+          const narrativeSnippet = response.narrative
+            ? `\n\n${response.narrative}`
+            : '';
+          sendKayleyWsPayload({
+            type: 'openroom_user_action',
+            line: `${label}${narrativeSnippet}`,
+          });
+        }
+
+        return {
+          status: 'success',
+          narrative: response.narrative,
+          evidence_unlocked: response.evidence_unlocked,
+        };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn('[MysteryApp] action failed:', action_type, msg);
@@ -201,48 +240,59 @@ const MysteryApp: React.FC = () => {
     [sendAction],
   );
 
-  const buildSnapshotSummary = useCallback((): string => {
-    const s = snapshotRef.current;
-    const tail = s.chat
-      .slice(-12)
-      .map((e) => `[${e.kind}] ${e.text}`)
-      .join('\n');
-    return JSON.stringify(
-      {
-        turnOwner: s.turnOwner,
-        gmConnected: s.status === 'open',
-        humanReadyToAccuse: s.humanReadyToAccuse,
-        agentReadyToAccuse: s.agentReadyToAccuse,
-        locationVisitActive: s.locationVisitActive,
-        busy: s.busy,
-        evidenceCount: s.evidence.length,
-        evidenceIds: s.evidence.map((e) => e.id),
-        demeanor: s.demeanor,
-        logTail: tail,
-        gameOver: s.gameOver ? { correct: s.gameOver.correct } : null,
-      },
-      null,
-      2,
-    );
-  }, []);
+  // `snapshotRef` lags one tick behind React state because it's updated inside
+  // a `useEffect`. Callers that have JUST set state and want the snapshot to
+  // reflect the post-update value must pass an `overrides` object — otherwise
+  // the snapshot reports the stale pre-set value (e.g. `turnOwner: null` even
+  // though we just set it to `'agent'`). Origin: 2026-05-12 playtest, the
+  // opening-pick + finishHumanTurn callsites were broadcasting stale snapshots
+  // on the openroom_mystery_turn channel.
+  const buildSnapshotSummary = useCallback(
+    (overrides?: { turnOwner?: TurnOwner | null }): string => {
+      const s = snapshotRef.current;
+      const effectiveTurnOwner =
+        overrides && 'turnOwner' in overrides ? overrides.turnOwner ?? null : s.turnOwner;
+      const tail = s.chat
+        .slice(-12)
+        .map((e) => `[${e.kind}] ${e.text}`)
+        .join('\n');
+      return JSON.stringify(
+        {
+          turnOwner: effectiveTurnOwner,
+          gmConnected: s.status === 'open',
+          humanReadyToAccuse: s.humanReadyToAccuse,
+          agentReadyToAccuse: s.agentReadyToAccuse,
+          locationVisitActive: s.locationVisitActive,
+          busy: s.busy,
+          evidenceCount: s.evidence.length,
+          evidenceIds: s.evidence.map((e) => e.id),
+          demeanor: s.demeanor,
+          logTail: tail,
+          gameOver: s.gameOver ? { correct: s.gameOver.correct } : null,
+        },
+        null,
+        2,
+      );
+    },
+    [],
+  );
 
   const finishHumanTurn = useCallback(() => {
     if (turnOwner !== 'human' || busy) return;
     setLocationVisitActive(false);
-    setInterrogationOpen(false);
     setInterrogating(null);
     setTurnOwner('agent');
     setChat((prev) => appendChat(prev, { kind: 'system', text: 'You finished your turn — Kayley’s move.' }));
     sendKayleyWsPayload({
       type: 'openroom_mystery_turn',
-      summary: buildSnapshotSummary(),
+      summary: buildSnapshotSummary({ turnOwner: 'agent' }),
     });
   }, [turnOwner, busy, buildSnapshotSummary]);
 
   const finishAgentTurn = useCallback(() => {
     if (turnOwner !== 'agent' || busy) return;
     setLocationVisitActive(false);
-    setInterrogationOpen(false);
+    setInterrogating(null);
     setTurnOwner('human');
     setChat((prev) => appendChat(prev, { kind: 'system', text: 'Kayley finished her turn — your move, Steven.' }));
   }, [turnOwner, busy]);
@@ -255,6 +305,7 @@ const MysteryApp: React.FC = () => {
         (r) => {
           if (r.status === 'success') {
             setInterrogating(suspect);
+            setSuspectsInterrogated((prev) => new Set([...prev, suspect]));
             setQuestionText('');
             setTimeout(() => questionInputRef.current?.focus(), 50);
           }
@@ -286,7 +337,10 @@ const MysteryApp: React.FC = () => {
         { location_id: loc },
         'You examine ' + name + '.',
       ).then((r) => {
-        if (r.status === 'success') setLocationVisitActive(true);
+        if (r.status === 'success') {
+          setLocationVisitActive(true);
+          setLocationsVisited((prev) => new Set([...prev, loc]));
+        }
       });
       reportAction(APP_ID, ACTION_EXAMINE_LOCATION, { location_id: loc });
     },
@@ -301,7 +355,11 @@ const MysteryApp: React.FC = () => {
         ACTION_READ_DOSSIER,
         { suspect_id: suspect },
         'You open the dossier on ' + name + '.',
-      );
+      ).then((r) => {
+        if (r.status === 'success') {
+          setDossiersOpened((prev) => new Set([...prev, suspect]));
+        }
+      });
       reportAction(APP_ID, ACTION_READ_DOSSIER, { suspect_id: suspect });
     },
     [dispatchMysteryAction, humanMayInvestigate, busy],
@@ -355,8 +413,18 @@ const MysteryApp: React.FC = () => {
     async (action: CharacterAppAction): Promise<string> => {
       const t = action.action_type ?? '';
       const params = (action.params || {}) as Record<string, string>;
+      mysteryLog('info', 'MysteryApp', 'handleAgentAction.enter', `Action received: ${t}`, {
+        action_type: t,
+        params,
+        turnOwner,
+        agentMayInvestigate,
+        busy,
+        gameOver: !!gameOver,
+        statusOpen: status === 'open',
+      });
 
       if (t === ACTION_GET_MYSTERY_STATE) {
+        mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'GET_MYSTERY_STATE → local snapshot', {});
         return buildSnapshotSummary();
       }
 
@@ -378,22 +446,69 @@ const MysteryApp: React.FC = () => {
       }
 
       if (!MYSTERY_GM_ACTIONS.includes(t as (typeof MYSTERY_GM_ACTIONS)[number])) {
+        mysteryLog('warning', 'MysteryApp', 'handleAgentAction.unknown', `Unknown action_type: ${t}`, {
+          action_type: t,
+        });
         return 'error: unknown action_type ' + t;
       }
 
       if (!agentMayInvestigate || busy) {
+        mysteryLog('warning', 'MysteryApp', 'handleAgentAction.gate', 'Gate blocked: not agent turn / GM busy', {
+          action_type: t,
+          turnOwner,
+          agentMayInvestigate,
+          busy,
+          status,
+          gameOver: !!gameOver,
+        });
         return 'error: not Kayley’s investigation turn or GM busy';
       }
 
       if (t === ACTION_COLLECT_EVIDENCE && !locationVisitActive) {
+        mysteryLog('warning', 'MysteryApp', 'handleAgentAction.gate', 'COLLECT_EVIDENCE without active location visit', {
+          locationVisitActive,
+        });
         return 'error: COLLECT_EVIDENCE only after EXAMINE_LOCATION on your turn (start a location visit first).';
       }
 
       const label =
         'Kayley → ' + t + (Object.keys(params).length ? ' ' + JSON.stringify(params) : '');
+      mysteryLog('info', 'MysteryApp', 'handleAgentAction.dispatch', `→ dispatchMysteryAction(${t})`, {
+        action_type: t,
+        params,
+      });
       const result = await dispatchMysteryAction(t, params, label);
+      mysteryLog(
+        result.status.startsWith('error:') ? 'error' : 'info',
+        'MysteryApp',
+        'handleAgentAction.dispatch.result',
+        `← dispatchMysteryAction(${t}) → ${result.status.slice(0, 60)}`,
+        {
+          action_type: t,
+          status: result.status,
+          narrative_length: result.narrative?.length ?? 0,
+        },
+      );
       if (result.status === 'success') {
-        if (t === ACTION_EXAMINE_LOCATION) setLocationVisitActive(true);
+        if (t === ACTION_EXAMINE_LOCATION) {
+          setLocationVisitActive(true);
+          if (params.location_id) {
+            const visitedLoc = params.location_id;
+            setLocationsVisited((prev) => new Set([...prev, visitedLoc]));
+          }
+        }
+        if (t === ACTION_READ_DOSSIER && params.suspect_id) {
+          const dossierTarget = params.suspect_id as SuspectId;
+          setDossiersOpened((prev) => new Set([...prev, dossierTarget]));
+        }
+        if (t === ACTION_INTERROGATE && params.suspect_id) {
+          const interrogateTarget = params.suspect_id as SuspectId;
+          setSuspectsInterrogated((prev) => new Set([...prev, interrogateTarget]));
+        }
+        if (t === ACTION_COLLECT_EVIDENCE && params.evidence_id) {
+          const collectedId = params.evidence_id;
+          setCollected((prev) => new Map([...prev, [collectedId, result.narrative ?? '']]));
+        }
         if (t === ACTION_MAKE_ACCUSATION) {
           setHumanReadyToAccuse(false);
           setAgentReadyToAccuse(false);
@@ -499,7 +614,7 @@ const MysteryApp: React.FC = () => {
                 onClick={() => {
                   setTurnOwner('agent');
                   setChat((prev) => appendChat(prev, { kind: 'system', text: 'Kayley leads the first investigation turn.' }));
-                  sendKayleyWsPayload({ type: 'openroom_mystery_turn', summary: buildSnapshotSummary() });
+                  sendKayleyWsPayload({ type: 'openroom_mystery_turn', summary: buildSnapshotSummary({ turnOwner: 'agent' }) });
                 }}
               >
                 Kayley goes first
@@ -514,7 +629,7 @@ const MysteryApp: React.FC = () => {
                   type="checkbox"
                   checked={humanReadyToAccuse}
                   onChange={(e) => setHumanReadyToAccuse(e.target.checked)}
-                  disabled={turnOwner !== 'human'}
+                  disabled={!!gameOver || busy}
                 />
                 Steven ready to accuse
               </label>
@@ -575,6 +690,7 @@ const MysteryApp: React.FC = () => {
                     <div className={styles.suspectActions}>
                       <button
                         type="button"
+                        className={dossiersOpened.has(s.id) ? styles.suspectActionDone : undefined}
                         disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
                         onClick={() => handleDossier(s.id)}
                       >
@@ -582,6 +698,7 @@ const MysteryApp: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        className={suspectsInterrogated.has(s.id) ? styles.suspectActionDone : undefined}
                         disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
                         onClick={() => handleInterrogate(s.id)}
                       >
@@ -600,19 +717,25 @@ const MysteryApp: React.FC = () => {
               <span>Locations</span>
             </div>
             <ul className={styles.locationList}>
-              {LOCATIONS.map((loc) => (
-                <li key={loc.id}>
-                  <button
-                    type="button"
-                    className={styles.locationBtn}
-                    disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
-                    onClick={() => handleExamine(loc.id)}
-                  >
-                    <div className={styles.locationName}>{loc.name}</div>
-                    <div className={styles.locationHint}>{loc.hint}</div>
-                  </button>
-                </li>
-              ))}
+              {LOCATIONS.map((loc) => {
+                const visited = locationsVisited.has(loc.id);
+                return (
+                  <li key={loc.id}>
+                    <button
+                      type="button"
+                      className={`${styles.locationBtn} ${visited ? styles.locationVisited : ''}`}
+                      disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
+                      onClick={() => handleExamine(loc.id)}
+                    >
+                      <div className={styles.locationName}>
+                        {loc.name}
+                        {visited && <span className={styles.locationVisitedBadge}>visited</span>}
+                      </div>
+                      <div className={styles.locationHint}>{loc.hint}</div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </aside>

@@ -434,6 +434,27 @@ export async function dispatchAgentAction(action: {
   /** Mystery GM responses can exceed 10s (Haiku); keep below browser GM client timeout. */
   const MYSTERY_APP_ID = 17;
   const mysteryDispatchTimeoutMs = action.app_id === MYSTERY_APP_ID ? 72_000 : 0;
+  if (action.app_id === MYSTERY_APP_ID) {
+    void import('./mysteryLogger')
+      .then(({ mysteryLog }) => {
+        mysteryLog(
+          'info',
+          'vibeContainerMock',
+          'dispatchAgentAction.enter',
+          `Mystery dispatch entered: ${action.action_type}`,
+          {
+            action_type: action.action_type,
+            action_id: action.action_id,
+            params_keys: Object.keys(action.params ?? {}),
+            callback_count: agentMessageCallbacks.size,
+            dispatch_timeout_ms: mysteryDispatchTimeoutMs,
+          },
+        );
+      })
+      .catch(() => {
+        /* noop — logger import shouldn't block dispatch */
+      });
+  }
 
   // Translate Action params
   const translatedParams = await translateActionParams(action);
@@ -490,6 +511,26 @@ export async function dispatchAgentAction(action: {
           if (Object.keys(extraInfo).length > 0) {
             result += ' ' + JSON.stringify(extraInfo);
           }
+          if (action.app_id === MYSTERY_APP_ID) {
+            void import('./mysteryLogger')
+              .then(({ mysteryLog }) => {
+                mysteryLog(
+                  'info',
+                  'vibeContainerMock',
+                  'dispatchAgentAction.resolved',
+                  `Mystery action_result received for ${action.action_type}`,
+                  {
+                    action_type: action.action_type,
+                    action_id: fullAction.action_id,
+                    result_length: result.length,
+                    result_prefix: result.slice(0, 120),
+                  },
+                );
+              })
+              .catch(() => {
+                /* noop */
+              });
+          }
           resolve(result);
         }
         mockManager.sendAgentMessage = originalSend;
@@ -501,6 +542,25 @@ export async function dispatchAgentAction(action: {
     const dispatch = () => {
       if (resolved) return;
       const payload = { content: JSON.stringify(fullAction) };
+      if (action.app_id === MYSTERY_APP_ID) {
+        void import('./mysteryLogger')
+          .then(({ mysteryLog }) => {
+            mysteryLog(
+              'info',
+              'vibeContainerMock',
+              'dispatchAgentAction.broadcast',
+              `Broadcasting to ${agentMessageCallbacks.size} listener(s)`,
+              {
+                action_type: action.action_type,
+                action_id: fullAction.action_id,
+                listener_count: agentMessageCallbacks.size,
+              },
+            );
+          })
+          .catch(() => {
+            /* noop */
+          });
+      }
       agentMessageCallbacks.forEach((cb) => cb(payload));
     };
 
