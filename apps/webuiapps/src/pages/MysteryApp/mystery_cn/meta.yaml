@@ -80,3 +80,26 @@ actions:
         type: string
         description: 作案方式与时间
         required: true
+
+  - type: FINISH_INVESTIGATION_TURN
+    name: 结束调查回合
+    description: >
+      结束本方当前调查回合并将控制权交给搭档。审讯、阅读档案或地点勘察
+      （查看+收集）后必须调用。不请求 GM。
+
+  - type: GET_MYSTERY_STATE
+    name: 获取悬疑状态
+    description: >
+      返回共享调查状态的结构化文本摘要（回合归属、准备标记、证据键、
+      聊天记录片段等）。用于代替截图。不请求 GM。
+
+  - type: SET_ACCUSATION_READY
+    name: 设置指控准备状态
+    description: >
+      Kayley 是否准备好进入正式指控流程。双方都必须准备好后，才允许
+      当前回合一方执行 MAKE_ACCUSATION。不请求 GM。
+    params:
+      - name: ready
+        type: string
+        description: "true" 或 "false"
+        required: true

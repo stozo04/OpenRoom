@@ -38,6 +38,7 @@ import {
 } from '@/lib/appRegistry';
 import { seedMetaFiles } from '@/lib/seedMeta';
 import { dispatchAgentAction, onUserAction } from '@/lib/vibeContainerMock';
+import { sendKayleyWsPayload } from '@/lib/kayleyWsBridge';
 import { closeAllWindows } from '@/lib/windowManager';
 import { getFileToolDefinitions, isFileTool, executeFileTool } from '@/lib/fileTools';
 import { setSessionPath } from '@/lib/sessionPath';
@@ -730,9 +731,6 @@ const ChatPanel: React.FC<{
   // Listen for user actions from apps
   useEffect(() => {
     const unsubscribe = onUserAction((event: unknown) => {
-      const cfg = configRef.current;
-      if (!hasUsableLLMConfig(cfg)) return;
-
       const evt = event as {
         app_action?: {
           app_id: number;
@@ -752,6 +750,18 @@ const ChatPanel: React.FC<{
       if (!app) return;
 
       const actionMsg = `[User performed action in ${app.displayName} (appName: ${app.appName})] action_type: ${action.action_type}, params: ${JSON.stringify(action.params || {})}`;
+
+      if (kayleyRef.current.connected) {
+        sendKayleyWsPayload({
+          type: 'openroom_user_action',
+          line: actionMsg,
+        });
+        return;
+      }
+
+      const cfg = configRef.current;
+      if (!hasUsableLLMConfig(cfg)) return;
+
       actionQueueRef.current.push(actionMsg);
       processActionQueue();
     });

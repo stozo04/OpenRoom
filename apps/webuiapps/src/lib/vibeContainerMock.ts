@@ -431,6 +431,10 @@ export async function dispatchAgentAction(action: {
     return handleChessAction(action);
   }
 
+  /** Mystery GM responses can exceed 10s (Haiku); keep below browser GM client timeout. */
+  const MYSTERY_APP_ID = 17;
+  const mysteryDispatchTimeoutMs = action.app_id === MYSTERY_APP_ID ? 72_000 : 0;
+
   // Translate Action params
   const translatedParams = await translateActionParams(action);
 
@@ -463,6 +467,8 @@ export async function dispatchAgentAction(action: {
     };
 
     let resolved = false;
+    const defaultMs = needsListenerWait ? 20000 : 10000;
+    const timeoutMs = mysteryDispatchTimeoutMs > 0 ? mysteryDispatchTimeoutMs : defaultMs;
     const timeout = setTimeout(
       () => {
         if (!resolved) {
@@ -470,7 +476,7 @@ export async function dispatchAgentAction(action: {
           resolve('timeout: no response from app');
         }
       },
-      needsListenerWait ? 20000 : 10000,
+      timeoutMs,
     );
 
     const originalSend = mockManager.sendAgentMessage;

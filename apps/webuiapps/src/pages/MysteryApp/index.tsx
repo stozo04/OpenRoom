@@ -2,14 +2,11 @@
  * MysteryApp — cooperative murder-mystery Vibe app.
  *
  * Steven (human) + Kayley (AI) play detectives together. Neither knows the
- * killer. A GM subprocess at ws://localhost:5182 holds the LOCKED truth.
+ * killer. A GM subprocess (see GM_WS_URL) holds the LOCKED truth.
  *
- * This component:
- *   - renders the case dossier (suspects / locations / evidence / chat)
- *   - dispatches 5 action types to the GM via useGMSocket
- *   - listens for CharacterAppActions forwarded from Kayley's brain
- *     (via vibeContainerMock) and pipes them to the same GM pathway so both
- *     detectives investigate through the same door
+ * Duo rules: choose who leads first; strict alternating turns; explicit
+ * "Finish turn" hands off; mutual "ready to accuse" before the formal
+ * accusation modal; GET_MYSTERY_STATE / FINISH / SET_ACCUSATION_READY for Kayley.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,16 +17,21 @@ import {
   reportLifecycle,
   useAgentActionListener,
   generateId,
+  ActionTriggerBy,
   type CharacterAppAction,
 } from '@/lib';
+import { sendKayleyWsPayload } from '@/lib/kayleyWsBridge';
 import styles from './index.module.scss';
 import {
   ACTION_COLLECT_EVIDENCE,
   ACTION_EXAMINE_LOCATION,
+  ACTION_FINISH_INVESTIGATION_TURN,
+  ACTION_GET_MYSTERY_STATE,
   ACTION_INTERROGATE,
   ACTION_MAKE_ACCUSATION,
   ACTION_READ_DOSSIER,
-  MYSTERY_ACTIONS,
+  ACTION_SET_ACCUSATION_READY,
+  MYSTERY_GM_ACTIONS,
 } from './actions/constants';
 import { useGMSocket } from './hooks/useGMSocket';
 import { LOCATIONS, SCENARIO_TAGLINE, SCENARIO_TITLE, SUSPECTS, VICTIM_NAME, VICTIM_ROLE } from './scenario';
@@ -43,11 +45,11 @@ import type {
   SuspectId,
 } from './types';
 
-// ============ Constants ============
 const APP_ID = 17;
 const APP_NAME = 'MysteryApp';
 
-// ============ Helpers ============
+type TurnOwner = 'human' | 'agent';
+
 function appendChat(prev: ChatEntry[], entry: Omit<ChatEntry, 'id' | 'ts'>): ChatEntry[] {
   return [...prev, { ...entry, id: generateId(), ts: Date.now() }];
 }
@@ -67,13 +69,17 @@ function mergeDemeanor(
   return { ...prev, ...incoming };
 }
 
-// ============ Main Component ============
+function serializeDispatchResult(r: { status: string; narrative?: string }): string {
+  if (r.status.startsWith('error:')) return r.status;
+  return JSON.stringify({ status: r.status, narrative: r.narrative ?? '' });
+}
+
 const MysteryApp: React.FC = () => {
   const [chat, setChat] = useState<ChatEntry[]>([
     {
       id: 'intro',
       kind: 'system',
-      text: 'The party is still loud downstairs. Marcus is still dead upstairs. Start investigating.',
+      text: 'The party is still loud downstairs. Marcus is still dead upstairs. Decide who takes the first investigation turn, then dig in.',
       ts: Date.now(),
     },
   ]);
@@ -87,35 +93,91 @@ const MysteryApp: React.FC = () => {
   const [interrogating, setInterrogating] = useState<SuspectId | null>(null);
   const [questionText, setQuestionText] = useState('');
 
+  /** null = still choosing who leads */
+  const [turnOwner, setTurnOwner] = useState<TurnOwner | null>(null);
+  const [locationVisitActive, setLocationVisitActive] = useState(false);
+  const [humanReadyToAccuse, setHumanReadyToAccuse] = useState(false);
+  const [agentReadyToAccuse, setAgentReadyToAccuse] = useState(false);
+
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLInputElement>(null);
   const { status, lastError, sendAction } = useGMSocket();
 
-  // Auto-scroll chat
+  const snapshotRef = useRef({
+    chat: [] as ChatEntry[],
+    evidence: [] as EvidenceItem[],
+    demeanor: {} as Partial<Record<SuspectId, SuspectDemeanor>>,
+    turnOwner: null as TurnOwner | null,
+    status: 'connecting' as string,
+    gameOver: null as MysteryActionResponse['game_over'] | null,
+    humanReadyToAccuse: false,
+    agentReadyToAccuse: false,
+    locationVisitActive: false,
+    busy: false,
+  });
+
+  useEffect(() => {
+    snapshotRef.current = {
+      chat,
+      evidence,
+      demeanor,
+      turnOwner,
+      status,
+      gameOver,
+      humanReadyToAccuse,
+      agentReadyToAccuse,
+      locationVisitActive,
+      busy,
+    };
+  }, [
+    chat,
+    evidence,
+    demeanor,
+    turnOwner,
+    status,
+    gameOver,
+    humanReadyToAccuse,
+    agentReadyToAccuse,
+    locationVisitActive,
+    busy,
+  ]);
+
+  useEffect(() => {
+    if (accuseOpen && !(humanReadyToAccuse && agentReadyToAccuse)) {
+      setAccuseOpen(false);
+    }
+  }, [humanReadyToAccuse, agentReadyToAccuse, accuseOpen]);
+
   useEffect(() => {
     const el = chatScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat]);
 
-  // ===== Core dispatch =====
+  const humanMayInvestigate = turnOwner === 'human' && status === 'open' && !gameOver;
+  const agentMayInvestigate = turnOwner === 'agent' && status === 'open' && !gameOver;
+
+  const canOpenAccusationModal =
+    humanMayInvestigate &&
+    humanReadyToAccuse &&
+    agentReadyToAccuse &&
+    !busy;
+
   const dispatchMysteryAction = useCallback(
-    async (action_type: string, params: Record<string, string>, label: string): Promise<{ status: string; narrative?: string }> => {
-      setChat((prev) =>
-        appendChat(prev, { kind: 'action', text: label }),
-      );
+    async (
+      action_type: string,
+      params: Record<string, string>,
+      label: string,
+    ): Promise<{ status: string; narrative?: string }> => {
+      setChat((prev) => appendChat(prev, { kind: 'action', text: label }));
       setBusy(true);
       try {
         const response = await sendAction({ action_type, params });
         if (response.error) {
-          setChat((prev) =>
-            appendChat(prev, { kind: 'error', text: 'GM: ' + response.error }),
-          );
+          setChat((prev) => appendChat(prev, { kind: 'error', text: 'GM: ' + response.error }));
           return { status: 'error: ' + response.error };
         }
         if (response.narrative) {
-          setChat((prev) =>
-            appendChat(prev, { kind: 'narrative', text: response.narrative }),
-          );
+          setChat((prev) => appendChat(prev, { kind: 'narrative', text: response.narrative }));
         }
         if (response.evidence_unlocked?.length) {
           setEvidence((prev) => mergeEvidence(prev, response.evidence_unlocked));
@@ -130,9 +192,7 @@ const MysteryApp: React.FC = () => {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn('[MysteryApp] action failed:', action_type, msg);
-        setChat((prev) =>
-          appendChat(prev, { kind: 'error', text: 'Action failed: ' + msg }),
-        );
+        setChat((prev) => appendChat(prev, { kind: 'error', text: 'Action failed: ' + msg }));
         return { status: 'error: ' + msg };
       } finally {
         setBusy(false);
@@ -141,28 +201,72 @@ const MysteryApp: React.FC = () => {
     [sendAction],
   );
 
-  // ===== User-triggered actions =====
+  const buildSnapshotSummary = useCallback((): string => {
+    const s = snapshotRef.current;
+    const tail = s.chat
+      .slice(-12)
+      .map((e) => `[${e.kind}] ${e.text}`)
+      .join('\n');
+    return JSON.stringify(
+      {
+        turnOwner: s.turnOwner,
+        gmConnected: s.status === 'open',
+        humanReadyToAccuse: s.humanReadyToAccuse,
+        agentReadyToAccuse: s.agentReadyToAccuse,
+        locationVisitActive: s.locationVisitActive,
+        busy: s.busy,
+        evidenceCount: s.evidence.length,
+        evidenceIds: s.evidence.map((e) => e.id),
+        demeanor: s.demeanor,
+        logTail: tail,
+        gameOver: s.gameOver ? { correct: s.gameOver.correct } : null,
+      },
+      null,
+      2,
+    );
+  }, []);
+
+  const finishHumanTurn = useCallback(() => {
+    if (turnOwner !== 'human' || busy) return;
+    setLocationVisitActive(false);
+    setInterrogationOpen(false);
+    setInterrogating(null);
+    setTurnOwner('agent');
+    setChat((prev) => appendChat(prev, { kind: 'system', text: 'You finished your turn — Kayley’s move.' }));
+    sendKayleyWsPayload({
+      type: 'openroom_mystery_turn',
+      summary: buildSnapshotSummary(),
+    });
+  }, [turnOwner, busy, buildSnapshotSummary]);
+
+  const finishAgentTurn = useCallback(() => {
+    if (turnOwner !== 'agent' || busy) return;
+    setLocationVisitActive(false);
+    setInterrogationOpen(false);
+    setTurnOwner('human');
+    setChat((prev) => appendChat(prev, { kind: 'system', text: 'Kayley finished her turn — your move, Steven.' }));
+  }, [turnOwner, busy]);
+
   const handleInterrogate = useCallback(
     (suspect: SuspectId) => {
+      if (!humanMayInvestigate || busy) return;
       const name = SUSPECTS.find((s) => s.id === suspect)?.name ?? suspect;
-      // Fire the initial scene-setting interrogation (no question yet)
-      void dispatchMysteryAction(
-        ACTION_INTERROGATE,
-        { suspect_id: suspect },
-        'You press ' + name + ' for answers.',
-      ).then(() => {
-        // After the scene is set, show the question bar for follow-ups
-        setInterrogating(suspect);
-        setQuestionText('');
-        setTimeout(() => questionInputRef.current?.focus(), 50);
-      });
+      void dispatchMysteryAction(ACTION_INTERROGATE, { suspect_id: suspect }, 'You press ' + name + ' for answers.').then(
+        (r) => {
+          if (r.status === 'success') {
+            setInterrogating(suspect);
+            setQuestionText('');
+            setTimeout(() => questionInputRef.current?.focus(), 50);
+          }
+        },
+      );
       reportAction(APP_ID, ACTION_INTERROGATE, { suspect_id: suspect });
     },
-    [dispatchMysteryAction],
+    [dispatchMysteryAction, humanMayInvestigate, busy],
   );
 
   const handleSubmitQuestion = useCallback(() => {
-    if (!interrogating || !questionText.trim()) return;
+    if (!humanMayInvestigate || !interrogating || !questionText.trim() || busy) return;
     const name = SUSPECTS.find((s) => s.id === interrogating)?.name ?? interrogating;
     void dispatchMysteryAction(
       ACTION_INTERROGATE,
@@ -171,23 +275,27 @@ const MysteryApp: React.FC = () => {
     );
     reportAction(APP_ID, ACTION_INTERROGATE, { suspect_id: interrogating, question: questionText.trim() });
     setQuestionText('');
-  }, [interrogating, questionText, dispatchMysteryAction]);
+  }, [interrogating, questionText, dispatchMysteryAction, humanMayInvestigate, busy]);
 
   const handleExamine = useCallback(
     (loc: LocationId) => {
+      if (!humanMayInvestigate || busy) return;
       const name = LOCATIONS.find((l) => l.id === loc)?.name ?? loc;
       void dispatchMysteryAction(
         ACTION_EXAMINE_LOCATION,
         { location_id: loc },
         'You examine ' + name + '.',
-      );
+      ).then((r) => {
+        if (r.status === 'success') setLocationVisitActive(true);
+      });
       reportAction(APP_ID, ACTION_EXAMINE_LOCATION, { location_id: loc });
     },
-    [dispatchMysteryAction],
+    [dispatchMysteryAction, humanMayInvestigate, busy],
   );
 
   const handleDossier = useCallback(
     (suspect: SuspectId) => {
+      if (!humanMayInvestigate || busy) return;
       const name = SUSPECTS.find((s) => s.id === suspect)?.name ?? suspect;
       void dispatchMysteryAction(
         ACTION_READ_DOSSIER,
@@ -196,25 +304,29 @@ const MysteryApp: React.FC = () => {
       );
       reportAction(APP_ID, ACTION_READ_DOSSIER, { suspect_id: suspect });
     },
-    [dispatchMysteryAction],
+    [dispatchMysteryAction, humanMayInvestigate, busy],
   );
 
   const handleCollect = useCallback(
     (evidence_id: string) => {
+      if (!humanMayInvestigate || busy || !locationVisitActive) return;
       void dispatchMysteryAction(
         ACTION_COLLECT_EVIDENCE,
         { evidence_id },
         'You bag the evidence: ' + evidence_id,
       ).then((result) => {
-        setCollected((prev) => new Map([...prev, [evidence_id, result.narrative ?? '']]));
+        if (result.status === 'success') {
+          setCollected((prev) => new Map([...prev, [evidence_id, result.narrative ?? '']]));
+        }
       });
       reportAction(APP_ID, ACTION_COLLECT_EVIDENCE, { evidence_id });
     },
-    [dispatchMysteryAction],
+    [dispatchMysteryAction, humanMayInvestigate, busy, locationVisitActive],
   );
 
   const handleAccuse = useCallback(
     (payload: AccusationPayload) => {
+      if (!humanMayInvestigate || busy || !canOpenAccusationModal) return;
       const name = SUSPECTS.find((s) => s.id === payload.killer_id)?.name ?? payload.killer_id;
       void dispatchMysteryAction(
         ACTION_MAKE_ACCUSATION,
@@ -233,29 +345,76 @@ const MysteryApp: React.FC = () => {
         method: payload.method,
       });
       setAccuseOpen(false);
+      setHumanReadyToAccuse(false);
+      setAgentReadyToAccuse(false);
     },
-    [dispatchMysteryAction],
+    [dispatchMysteryAction, humanMayInvestigate, busy, canOpenAccusationModal],
   );
 
-  // ===== Agent (Kayley) dispatched actions =====
   const handleAgentAction = useCallback(
     async (action: CharacterAppAction): Promise<string> => {
-      const t = action.action_type;
-      if (!MYSTERY_ACTIONS.includes(t as (typeof MYSTERY_ACTIONS)[number])) {
+      const t = action.action_type ?? '';
+      const params = (action.params || {}) as Record<string, string>;
+
+      if (t === ACTION_GET_MYSTERY_STATE) {
+        return buildSnapshotSummary();
+      }
+
+      if (t === ACTION_SET_ACCUSATION_READY) {
+        const raw = (params.ready ?? '').toLowerCase();
+        const v = raw === 'true' || raw === '1' || raw === 'yes';
+        setAgentReadyToAccuse(v);
+        reportAction(APP_ID, ACTION_SET_ACCUSATION_READY, { ready: v ? 'true' : 'false' }, ActionTriggerBy.Agent);
+        return v ? 'success: Kayley marked ready to discuss formal accusation.' : 'success: Kayley revoked accusation readiness.';
+      }
+
+      if (t === ACTION_FINISH_INVESTIGATION_TURN) {
+        if (turnOwner !== 'agent' || busy) {
+          return 'error: FINISH_INVESTIGATION_TURN only when it is Kayley’s turn and the GM is idle.';
+        }
+        finishAgentTurn();
+        reportAction(APP_ID, ACTION_FINISH_INVESTIGATION_TURN, {}, ActionTriggerBy.Agent);
+        return 'success: Turn handed to Steven.';
+      }
+
+      if (!MYSTERY_GM_ACTIONS.includes(t as (typeof MYSTERY_GM_ACTIONS)[number])) {
         return 'error: unknown action_type ' + t;
       }
-      const params = (action.params || {}) as Record<string, string>;
+
+      if (!agentMayInvestigate || busy) {
+        return 'error: not Kayley’s investigation turn or GM busy';
+      }
+
+      if (t === ACTION_COLLECT_EVIDENCE && !locationVisitActive) {
+        return 'error: COLLECT_EVIDENCE only after EXAMINE_LOCATION on your turn (start a location visit first).';
+      }
+
       const label =
-        'Kayley → ' +
-        t +
-        (Object.keys(params).length ? ' ' + JSON.stringify(params) : '');
-      return dispatchMysteryAction(t, params, label);
+        'Kayley → ' + t + (Object.keys(params).length ? ' ' + JSON.stringify(params) : '');
+      const result = await dispatchMysteryAction(t, params, label);
+      if (result.status === 'success') {
+        if (t === ACTION_EXAMINE_LOCATION) setLocationVisitActive(true);
+        if (t === ACTION_MAKE_ACCUSATION) {
+          setHumanReadyToAccuse(false);
+          setAgentReadyToAccuse(false);
+        }
+      }
+      reportAction(APP_ID, t, params, ActionTriggerBy.Agent);
+      return serializeDispatchResult(result);
     },
-    [dispatchMysteryAction],
+    [
+      buildSnapshotSummary,
+      agentMayInvestigate,
+      busy,
+      dispatchMysteryAction,
+      finishAgentTurn,
+      locationVisitActive,
+      turnOwner,
+    ],
   );
+
   useAgentActionListener(APP_ID, handleAgentAction);
 
-  // ===== Lifecycle handshake =====
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -293,7 +452,6 @@ const MysteryApp: React.FC = () => {
     };
   }, []);
 
-  // ===== Derived =====
   const statusDot = useMemo(() => {
     if (status === 'open') return { color: '#22c55e', label: 'GM connected' };
     if (status === 'connecting') return { color: '#FAEA5F', label: 'Connecting to GM…' };
@@ -301,10 +459,15 @@ const MysteryApp: React.FC = () => {
     return { color: '#888', label: 'GM disconnected' };
   }, [status]);
 
-  // ============ Render ============
+  const turnLabel =
+    turnOwner === null
+      ? 'Pick who leads'
+      : turnOwner === 'human'
+        ? 'Your turn (Steven)'
+        : 'Kayley’s turn';
+
   return (
     <div className={styles.mystery}>
-      {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.caseLabel}>CASE FILE</div>
@@ -319,11 +482,66 @@ const MysteryApp: React.FC = () => {
             <span className={styles.statusDot} style={{ background: statusDot.color }} />
             <span>{statusDot.label}</span>
           </div>
+          <div className={styles.turnBanner} data-testid="mystery-turn-label">
+            {turnLabel}
+          </div>
           {lastError && <div className={styles.errorText}>{lastError}</div>}
+
+          {turnOwner === null && !gameOver && (
+            <div className={styles.openingPick} data-testid="mystery-opening-pick">
+              <span>Who takes the first investigation turn?</span>
+              <button type="button" className={styles.openingBtn} onClick={() => setTurnOwner('human')}>
+                I go first
+              </button>
+              <button
+                type="button"
+                className={styles.openingBtn}
+                onClick={() => {
+                  setTurnOwner('agent');
+                  setChat((prev) => appendChat(prev, { kind: 'system', text: 'Kayley leads the first investigation turn.' }));
+                  sendKayleyWsPayload({ type: 'openroom_mystery_turn', summary: buildSnapshotSummary() });
+                }}
+              >
+                Kayley goes first
+              </button>
+            </div>
+          )}
+
+          {turnOwner !== null && !gameOver && (
+            <div className={styles.readyRow}>
+              <label className={styles.readyLabel}>
+                <input
+                  type="checkbox"
+                  checked={humanReadyToAccuse}
+                  onChange={(e) => setHumanReadyToAccuse(e.target.checked)}
+                  disabled={turnOwner !== 'human'}
+                />
+                Steven ready to accuse
+              </label>
+              <span className={styles.readyHint}>Kayley toggles readiness via vibe_action SET_ACCUSATION_READY.</span>
+              <span className={styles.readyBadge} data-testid="agent-ready-badge">
+                Kayley ready: {agentReadyToAccuse ? 'yes' : 'no'}
+              </span>
+            </div>
+          )}
+
+          {turnOwner === 'human' && !gameOver && (
+            <button
+              type="button"
+              className={styles.finishTurnBtn}
+              data-testid="mystery-finish-turn"
+              disabled={busy || !humanMayInvestigate}
+              onClick={finishHumanTurn}
+            >
+              Finish turn
+            </button>
+          )}
+
           <button
             type="button"
             className={styles.accuseButton}
-            disabled={busy || !!gameOver || status !== 'open'}
+            data-testid="mystery-make-accusation"
+            disabled={!canOpenAccusationModal}
             onClick={() => setAccuseOpen(true)}
           >
             <Gavel size={16} /> Make Accusation
@@ -332,7 +550,6 @@ const MysteryApp: React.FC = () => {
       </header>
 
       <div className={styles.body}>
-        {/* Left column: suspects + locations */}
         <aside className={styles.leftCol}>
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
@@ -358,14 +575,14 @@ const MysteryApp: React.FC = () => {
                     <div className={styles.suspectActions}>
                       <button
                         type="button"
-                        disabled={busy || !!gameOver || status !== 'open'}
+                        disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
                         onClick={() => handleDossier(s.id)}
                       >
                         <ScrollText size={12} /> Dossier
                       </button>
                       <button
                         type="button"
-                        disabled={busy || !!gameOver || status !== 'open'}
+                        disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
                         onClick={() => handleInterrogate(s.id)}
                       >
                         <Search size={12} /> Interrogate
@@ -388,7 +605,7 @@ const MysteryApp: React.FC = () => {
                   <button
                     type="button"
                     className={styles.locationBtn}
-                    disabled={busy || !!gameOver || status !== 'open'}
+                    disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
                     onClick={() => handleExamine(loc.id)}
                   >
                     <div className={styles.locationName}>{loc.name}</div>
@@ -400,7 +617,6 @@ const MysteryApp: React.FC = () => {
           </section>
         </aside>
 
-        {/* Middle: interrogation chat */}
         <section className={styles.chatPanel}>
           <div className={styles.panelHeader}>
             <Search size={16} />
@@ -435,12 +651,12 @@ const MysteryApp: React.FC = () => {
                     setInterrogating(null);
                   }
                 }}
-                disabled={busy || !!gameOver || status !== 'open'}
+                disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate}
               />
               <button
                 type="button"
                 className={styles.questionSend}
-                disabled={busy || !!gameOver || status !== 'open' || !questionText.trim()}
+                disabled={busy || !!gameOver || status !== 'open' || !humanMayInvestigate || !questionText.trim()}
                 onClick={handleSubmitQuestion}
               >
                 Ask
@@ -457,7 +673,6 @@ const MysteryApp: React.FC = () => {
           )}
         </section>
 
-        {/* Right column: evidence board */}
         <aside className={styles.evidenceCol}>
           <div className={styles.panelHeader}>
             <ScrollText size={16} />
@@ -492,16 +707,16 @@ const MysteryApp: React.FC = () => {
                     <button
                       type="button"
                       className={styles.evidenceCollect}
-                      disabled={busy || !!gameOver || status !== 'open'}
+                      disabled={
+                        busy || !!gameOver || status !== 'open' || !humanMayInvestigate || !locationVisitActive
+                      }
                       onClick={() => handleCollect(ev.id)}
                     >
                       Collect
                     </button>
                   )}
                   {expandedEvidence.has(ev.id) && collected.has(ev.id) && (
-                    <div className={styles.evidenceNotes}>
-                      {collected.get(ev.id)}
-                    </div>
+                    <div className={styles.evidenceNotes}>{collected.get(ev.id)}</div>
                   )}
                 </li>
               ))}
@@ -518,14 +733,11 @@ const MysteryApp: React.FC = () => {
         />
       )}
 
-      {gameOver && (
-        <GameOverModal gameOver={gameOver} onClose={() => setGameOver(null)} />
-      )}
+      {gameOver && <GameOverModal gameOver={gameOver} onClose={() => setGameOver(null)} />}
     </div>
   );
 };
 
-// ============ Accusation Modal ============
 const AccusationModal: React.FC<{
   onClose: () => void;
   onSubmit: (payload: AccusationPayload) => void;
@@ -552,10 +764,7 @@ const AccusationModal: React.FC<{
         </p>
         <label className={styles.field}>
           <span>Killer</span>
-          <select
-            value={killerId}
-            onChange={(e) => setKillerId(e.target.value as SuspectId)}
-          >
+          <select value={killerId} onChange={(e) => setKillerId(e.target.value as SuspectId)}>
             {SUSPECTS.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} — {s.role}
@@ -610,7 +819,6 @@ const AccusationModal: React.FC<{
   );
 };
 
-// ============ Game Over Modal ============
 const GameOverModal: React.FC<{
   gameOver: NonNullable<MysteryActionResponse['game_over']>;
   onClose: () => void;
@@ -624,9 +832,7 @@ const GameOverModal: React.FC<{
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2 className={verdictClass}>
-            {gameOver.correct ? 'CASE CLOSED' : 'WRONG CALL'}
-          </h2>
+          <h2 className={verdictClass}>{gameOver.correct ? 'CASE CLOSED' : 'WRONG CALL'}</h2>
           <button type="button" className={styles.modalClose} onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>

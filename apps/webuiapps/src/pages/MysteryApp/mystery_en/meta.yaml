@@ -93,3 +93,29 @@ actions:
         type: string
         description: How and when they did it
         required: true
+
+  - type: FINISH_INVESTIGATION_TURN
+    name: Finish Investigation Turn
+    description: >
+      End your side of the current investigation turn and hand control to your partner.
+      Required after interrogation, dossier read, or location visit (examine + collect).
+      Does not call the GM.
+
+  - type: GET_MYSTERY_STATE
+    name: Get Mystery State
+    description: >
+      Returns a structured text summary of the shared investigation state (turn owner,
+      readiness flags, evidence keys, chat excerpt). Use instead of screenshots.
+      Does not call the GM.
+
+  - type: SET_ACCUSATION_READY
+    name: Set Accusation Readiness
+    description: >
+      Kayley's readiness to open the formal accusation flow. Both partners must be
+      ready before MAKE_ACCUSATION is allowed for the current-turn actor.
+      Does not call the GM.
+    params:
+      - name: ready
+        type: string
+        description: "true" or "false"
+        required: true

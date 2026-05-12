@@ -119,6 +119,87 @@ $faint: rgba(232, 220, 196, 0.2);
   }
 }
 
+.turnBanner {
+  font-size: 12px;
+  font-weight: 600;
+  color: $amber;
+  letter-spacing: 0.04em;
+}
+
+.openingPick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 12px;
+  color: $muted;
+}
+
+.openingBtn {
+  background: $bg-3;
+  color: $parchment;
+  border: 1px solid $faint;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  &:hover {
+    border-color: $amber-dim;
+    color: $amber;
+  }
+}
+
+.readyRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 11px;
+  color: $muted;
+}
+
+.readyLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: $parchment;
+}
+
+.readyHint {
+  font-size: 10px;
+  opacity: 0.75;
+  max-width: 280px;
+  text-align: right;
+}
+
+.readyBadge {
+  font-size: 11px;
+  color: $amber-dim;
+}
+
+.finishTurnBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: $bg-3;
+  color: $amber;
+  border: 1px solid $amber-dim;
+  padding: 8px 14px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    background: lighten($bg-3, 4%);
+  }
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
 .body {
   flex: 1;
   display: grid;

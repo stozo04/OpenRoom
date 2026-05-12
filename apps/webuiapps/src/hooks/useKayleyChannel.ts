@@ -24,6 +24,7 @@ import { logger } from '@/lib/logger'
 import { resolveAppAction, loadActionsFromMeta } from '@/lib/appRegistry'
 import { dispatchAgentAction } from '@/lib/vibeContainerMock'
 import { seedMetaFiles } from '@/lib/seedMeta'
+import { registerKayleyWsSender } from '@/lib/kayleyWsBridge'
 
 const KAYLEY_WS_URL =
   (import.meta as unknown as { env?: Record<string, string | undefined> }).env
@@ -69,6 +70,7 @@ export function useKayleyChannel(): UseKayleyChannelResult {
   const [latestMessage, setLatestMessage] = useState<KayleyMessage | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
+  const kayleyBridgeUnregisterRef = useRef<(() => void) | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRecordingRef = useRef(false)
 
@@ -196,9 +198,18 @@ export function useKayleyChannel(): UseKayleyChannelResult {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
       }
+      kayleyBridgeUnregisterRef.current?.()
+      kayleyBridgeUnregisterRef.current = registerKayleyWsSender((payload) => {
+        const open = wsRef.current
+        if (open && open.readyState === WebSocket.OPEN) {
+          open.send(JSON.stringify(payload))
+        }
+      })
     }
 
     ws.onclose = () => {
+      kayleyBridgeUnregisterRef.current?.()
+      kayleyBridgeUnregisterRef.current = null
       setConnected(false)
       setIsRecording(false)
       isRecordingRef.current = false
