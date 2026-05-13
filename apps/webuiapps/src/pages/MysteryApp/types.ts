@@ -31,12 +31,15 @@ export interface EvidenceItem {
   unlocked_at: number;
 }
 
+export type ChatAuthor = 'kayley' | 'steven';
+
 export interface ChatEntry {
   id: string;
-  kind: 'narrative' | 'action' | 'system' | 'error';
+  kind: 'narrative' | 'action' | 'system' | 'error' | 'chat';
   text: string;
   suspect_id?: SuspectId;
   location_id?: LocationId;
+  author?: ChatAuthor;
   ts: number;
 }
 

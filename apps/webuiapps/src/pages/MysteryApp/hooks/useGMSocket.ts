@@ -19,6 +19,7 @@ import {
   GM_WS_URL,
 } from '../actions/constants';
 import type { MysteryActionRequest, MysteryActionResponse } from '../types';
+import { mysteryLog } from '@/lib/mysteryLogger';
 
 type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
 
@@ -77,6 +78,7 @@ export function useGMSocket(): UseGMSocketResult {
       setStatus('open');
       setLastError(null);
       console.info('[MysteryApp] GM socket connected');
+      mysteryLog('info', 'useGMSocket', 'ws.open', `GM socket connected at ${GM_WS_URL}`, { url: GM_WS_URL });
     };
 
     ws.onmessage = (event) => {
@@ -89,14 +91,31 @@ export function useGMSocket(): UseGMSocketResult {
             clearTimeout(pending.timer);
             pendingRef.current.delete(data.action_id);
             pending.resolve(data);
+            mysteryLog('info', 'useGMSocket', 'ws.message.resolve', `GM resolved action ${data.action_id}`, {
+              action_id: data.action_id,
+              has_narrative: !!data.narrative,
+              has_error: !!data.error,
+              has_evidence: !!data.evidence_unlocked?.length,
+              has_demeanor: !!data.suspect_demeanor,
+              has_game_over: !!data.game_over,
+            });
             return;
           }
+          mysteryLog('warning', 'useGMSocket', 'ws.message.unmatched', `GM action_id ${data.action_id} has no pending resolver`, {
+            action_id: data.action_id,
+          });
         }
         // Unsolicited narrative push (allowed) — no pending resolver, log it.
         console.info('[MysteryApp] GM push (no action_id match):', data);
+        mysteryLog('info', 'useGMSocket', 'ws.message.push', 'Unsolicited GM push', {
+          keys: Object.keys(data ?? {}),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn('[MysteryApp] GM message parse failed:', msg, event.data);
+        mysteryLog('error', 'useGMSocket', 'ws.message.parse_failed', msg, {
+          raw_preview: String(event.data).slice(0, 200),
+        });
       }
     };
 
@@ -106,6 +125,7 @@ export function useGMSocket(): UseGMSocketResult {
       console.warn('[MysteryApp]', msg, ev);
       setLastError(msg);
       setStatus('error');
+      mysteryLog('error', 'useGMSocket', 'ws.error', msg, { url: GM_WS_URL });
     };
 
     ws.onclose = () => {
@@ -113,6 +133,9 @@ export function useGMSocket(): UseGMSocketResult {
       setStatus('closed');
       rejectAllPending(new Error('GM socket closed before response arrived'));
       scheduleReconnect();
+      mysteryLog('warning', 'useGMSocket', 'ws.close', `GM socket closed; reconnect scheduled in ${GM_RECONNECT_MS}ms`, {
+        reconnect_ms: GM_RECONNECT_MS,
+      });
     };
   }, [rejectAllPending]);
 
@@ -152,6 +175,10 @@ export function useGMSocket(): UseGMSocketResult {
       new Promise<MysteryActionResponse>((resolve, reject) => {
         const ws = socketRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
+          mysteryLog('error', 'useGMSocket', 'sendAction.gate', 'GM socket not OPEN; rejecting', {
+            ready_state: ws?.readyState ?? 'no-socket',
+            action_type: action.action_type,
+          });
           reject(new Error('GM socket is not open — cannot send action yet'));
           return;
         }
@@ -167,6 +194,11 @@ export function useGMSocket(): UseGMSocketResult {
           const pending = pendingRef.current.get(action_id);
           if (pending) {
             pendingRef.current.delete(action_id);
+            mysteryLog('error', 'useGMSocket', 'sendAction.timeout', `GM did not respond within ${GM_RESPONSE_TIMEOUT_MS}ms`, {
+              action_id,
+              action_type: action.action_type,
+              timeout_ms: GM_RESPONSE_TIMEOUT_MS,
+            });
             pending.reject(
               new Error(
                 'GM did not respond within ' + GM_RESPONSE_TIMEOUT_MS + 'ms',
@@ -179,10 +211,19 @@ export function useGMSocket(): UseGMSocketResult {
 
         try {
           ws.send(JSON.stringify(payload));
+          mysteryLog('info', 'useGMSocket', 'sendAction.sent', `→ GM ${action.action_type}`, {
+            action_id,
+            action_type: action.action_type,
+            params_keys: Object.keys((action as { params?: Record<string, unknown> }).params ?? {}),
+          });
         } catch (err) {
           clearTimeout(timer);
           pendingRef.current.delete(action_id);
           const msg = err instanceof Error ? err.message : String(err);
+          mysteryLog('error', 'useGMSocket', 'sendAction.send_failed', msg, {
+            action_id,
+            action_type: action.action_type,
+          });
           reject(new Error('Failed to send action: ' + msg));
         }
       }),
