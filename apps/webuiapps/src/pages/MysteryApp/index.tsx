@@ -24,6 +24,7 @@ import { sendKayleyWsPayload } from '@/lib/kayleyWsBridge';
 import { mysteryLog } from '@/lib/mysteryLogger';
 import styles from './index.module.scss';
 import {
+  ACTION_CHAT_MESSAGE,
   ACTION_COLLECT_EVIDENCE,
   ACTION_EXAMINE_LOCATION,
   ACTION_FINISH_INVESTIGATION_TURN,
@@ -111,6 +112,7 @@ const MysteryApp: React.FC = () => {
   const [locationsVisited, setLocationsVisited] = useState<Set<string>>(new Set());
   const [interrogating, setInterrogating] = useState<SuspectId | null>(null);
   const [questionText, setQuestionText] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
 
   /** null = still choosing who leads */
   const [turnOwner, setTurnOwner] = useState<TurnOwner | null>(null);
@@ -382,6 +384,18 @@ const MysteryApp: React.FC = () => {
     [dispatchMysteryAction, humanMayInvestigate, busy, locationVisitActive],
   );
 
+  const submitHumanChat = useCallback(() => {
+    const text = chatDraft.trim();
+    if (!text || gameOver) return;
+    setChat((prev) => appendChat(prev, { kind: 'chat', text, author: 'steven' }));
+    sendKayleyWsPayload({
+      type: 'openroom_user_action',
+      line: `chat: ${text}`,
+    });
+    reportAction(APP_ID, 'CHAT_MESSAGE', { text }, ActionTriggerBy.Human);
+    setChatDraft('');
+  }, [chatDraft, gameOver]);
+
   const handleAccuse = useCallback(
     (payload: AccusationPayload) => {
       if (!humanMayInvestigate || busy || !canOpenAccusationModal) return;
@@ -426,6 +440,19 @@ const MysteryApp: React.FC = () => {
       if (t === ACTION_GET_MYSTERY_STATE) {
         mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'GET_MYSTERY_STATE → local snapshot', {});
         return buildSnapshotSummary();
+      }
+
+      if (t === ACTION_CHAT_MESSAGE) {
+        const text = (params.text ?? '').trim();
+        if (!text) {
+          return 'error: CHAT_MESSAGE requires a non-empty text param.';
+        }
+        mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'CHAT_MESSAGE → chat panel', {
+          length: text.length,
+        });
+        setChat((prev) => appendChat(prev, { kind: 'chat', text, author: 'kayley' }));
+        reportAction(APP_ID, ACTION_CHAT_MESSAGE, { text }, ActionTriggerBy.Agent);
+        return 'success: chat appended.';
       }
 
       if (t === ACTION_SET_ACCUSATION_READY) {
@@ -746,12 +773,48 @@ const MysteryApp: React.FC = () => {
             <span>Investigation Log</span>
           </div>
           <div className={styles.chatScroll} ref={chatScrollRef}>
-            {chat.map((entry) => (
-              <div key={entry.id} className={styles['chat_' + entry.kind]}>
-                {entry.text}
-              </div>
-            ))}
+            {chat.map((entry) => {
+              const cls = styles['chat_' + entry.kind] ?? styles.chat_system;
+              const authorPrefix =
+                entry.kind === 'chat' && entry.author
+                  ? entry.author === 'kayley'
+                    ? 'Kayley: '
+                    : 'Steven: '
+                  : '';
+              return (
+                <div key={entry.id} className={cls} data-author={entry.author ?? ''}>
+                  {authorPrefix}
+                  {entry.text}
+                </div>
+              );
+            })}
             {busy && <div className={styles.chat_system}>GM is thinking…</div>}
+          </div>
+          <div className={styles.chatComposer} data-testid="mystery-chat-composer">
+            <input
+              type="text"
+              className={styles.chatComposerInput}
+              placeholder="Say something to Kayley (co-detective banter)…"
+              value={chatDraft}
+              onChange={(e) => setChatDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitHumanChat();
+                }
+              }}
+              disabled={!!gameOver}
+              data-testid="mystery-chat-input"
+            />
+            <button
+              type="button"
+              className={styles.chatComposerSend}
+              disabled={!chatDraft.trim() || !!gameOver}
+              onClick={submitHumanChat}
+              data-testid="mystery-chat-send"
+            >
+              Send
+            </button>
           </div>
           {interrogating && (
             <div className={styles.questionBar}>

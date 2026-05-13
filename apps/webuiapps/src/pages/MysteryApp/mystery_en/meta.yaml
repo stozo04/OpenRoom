@@ -119,3 +119,16 @@ actions:
         type: string
         description: "true" or "false"
         required: true
+
+  - type: CHAT_MESSAGE
+    name: Chat Message
+    description: >
+      Speak into the shared Investigation Log as co-detective banter — observations,
+      theories, suspicions, jokes, push-backs on Steven's reads. Required at least
+      once per turn so the detective dialogue stays alive. Does NOT count as your
+      investigation action and does not call the GM.
+    params:
+      - name: text
+        type: string
+        description: The chat message text (modern noir tone, dry and observant).
+        required: true

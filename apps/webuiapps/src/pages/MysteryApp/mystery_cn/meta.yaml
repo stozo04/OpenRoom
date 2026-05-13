@@ -103,3 +103,15 @@ actions:
         type: string
         description: "true" 或 "false"
         required: true
+
+  - type: CHAT_MESSAGE
+    name: 发送聊天消息
+    description: >
+      在共享调查日志中以搭档侦探的口吻发言——观察、推理、怀疑、玩笑、
+      对 Steven 推论的反驳。每回合至少调用一次以保持侦探对话活跃。
+      不消耗调查动作，不请求 GM。
+    params:
+      - name: text
+        type: string
+        description: 聊天消息文本（现代黑色风格，干练而敏锐）。
+        required: true
