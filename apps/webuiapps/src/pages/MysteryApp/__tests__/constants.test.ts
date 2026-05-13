@@ -8,7 +8,9 @@ import {
   ACTION_INTERROGATE,
   ACTION_MAKE_ACCUSATION,
   ACTION_READ_DOSSIER,
+  ACTION_RESET_GAMEOVER,
   ACTION_SET_ACCUSATION_READY,
+  ACTION_SET_OPENING_PICK,
   MYSTERY_APP_ACTION_TYPES,
   MYSTERY_GM_ACTIONS,
 } from '../actions/constants';
@@ -40,5 +42,17 @@ describe('MysteryApp actions/constants', () => {
     expect(ACTION_CHAT_MESSAGE).toBe('CHAT_MESSAGE');
     expect(MYSTERY_GM_ACTIONS).not.toContain(ACTION_CHAT_MESSAGE);
     expect(MYSTERY_APP_ACTION_TYPES).toContain(ACTION_CHAT_MESSAGE);
+  });
+
+  it('ACTION_SET_OPENING_PICK is a local-only autonomous-play unblocker', () => {
+    expect(ACTION_SET_OPENING_PICK).toBe('SET_OPENING_PICK');
+    expect(MYSTERY_GM_ACTIONS).not.toContain(ACTION_SET_OPENING_PICK);
+    expect(MYSTERY_APP_ACTION_TYPES).toContain(ACTION_SET_OPENING_PICK);
+  });
+
+  it('ACTION_RESET_GAMEOVER is local-only and clears stale gameOver state', () => {
+    expect(ACTION_RESET_GAMEOVER).toBe('RESET_GAMEOVER');
+    expect(MYSTERY_GM_ACTIONS).not.toContain(ACTION_RESET_GAMEOVER);
+    expect(MYSTERY_APP_ACTION_TYPES).toContain(ACTION_RESET_GAMEOVER);
   });
 });

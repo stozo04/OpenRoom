@@ -120,6 +120,26 @@ actions:
         description: "true" or "false"
         required: true
 
+  - type: RESET_GAMEOVER
+    name: Reset Game Over
+    description: >
+      Clear a stale gameOver state so investigation can resume. Useful when a
+      prior MAKE_ACCUSATION left a malformed gameOver in React state (e.g.
+      empty object from a GM verdict-normalizer regression) and the next
+      action is being blocked by the !gameOver gate. Does not call the GM.
+
+  - type: SET_OPENING_PICK
+    name: Set Opening Pick
+    description: >
+      Sets who takes the first investigation turn. Only valid before a game has
+      started (turnOwner is null). Unblocks autonomous play when no human is
+      present to click the opening-pick buttons in the UI. Does not call the GM.
+    params:
+      - name: leader
+        type: string
+        description: "human" or "agent"
+        required: true
+
   - type: CHAT_MESSAGE
     name: Chat Message
     description: >

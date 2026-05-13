@@ -33,6 +33,8 @@ import {
   ACTION_MAKE_ACCUSATION,
   ACTION_READ_DOSSIER,
   ACTION_SET_ACCUSATION_READY,
+  ACTION_RESET_GAMEOVER,
+  ACTION_SET_OPENING_PICK,
   MYSTERY_GM_ACTIONS,
 } from './actions/constants';
 import { useGMSocket } from './hooks/useGMSocket';
@@ -440,6 +442,36 @@ const MysteryApp: React.FC = () => {
       if (t === ACTION_GET_MYSTERY_STATE) {
         mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'GET_MYSTERY_STATE → local snapshot', {});
         return buildSnapshotSummary();
+      }
+
+      if (t === ACTION_RESET_GAMEOVER) {
+        mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'RESET_GAMEOVER → clearing gameOver state', {});
+        setGameOver(null);
+        reportAction(APP_ID, ACTION_RESET_GAMEOVER, {}, ActionTriggerBy.Agent);
+        return 'success: gameOver cleared, investigation can resume.';
+      }
+
+      if (t === ACTION_SET_OPENING_PICK) {
+        if (turnOwner !== null) {
+          return 'error: SET_OPENING_PICK only valid before a game has started (turnOwner is already ' + turnOwner + ').';
+        }
+        const leader = (params.leader ?? '').toLowerCase();
+        if (leader !== 'human' && leader !== 'agent') {
+          return 'error: SET_OPENING_PICK requires leader=human|agent.';
+        }
+        mysteryLog('info', 'MysteryApp', 'handleAgentAction.branch', 'SET_OPENING_PICK → turnOwner', { leader });
+        setTurnOwner(leader as TurnOwner);
+        if (leader === 'agent') {
+          setChat((prev) => appendChat(prev, { kind: 'system', text: 'Kayley leads the first investigation turn.' }));
+        } else {
+          setChat((prev) => appendChat(prev, { kind: 'system', text: 'Steven leads the first investigation turn.' }));
+        }
+        sendKayleyWsPayload({
+          type: 'openroom_mystery_turn',
+          summary: buildSnapshotSummary({ turnOwner: leader as TurnOwner }),
+        });
+        reportAction(APP_ID, ACTION_SET_OPENING_PICK, { leader }, ActionTriggerBy.Agent);
+        return 'success: opening pick set to ' + leader + '.';
       }
 
       if (t === ACTION_CHAT_MESSAGE) {
